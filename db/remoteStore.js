@@ -1,4 +1,4 @@
-const PREFIXES = { quotation: 'QT-HV', proforma: 'PI-HV', tax_invoice: 'TI-HV' };
+const PREFIXES = { quotation: 'QT-HV', proforma: 'PI-HV', tax_invoice: 'TI-HV', delivery_challan: 'DC-HV', purchase_order: 'PO-HV' };
 
 function createRemoteStore(client) {
   async function currentUserId() {
@@ -9,6 +9,24 @@ function createRemoteStore(client) {
   function unwrap({ data, error }) {
     if (error) throw new Error(error.message);
     return data;
+  }
+
+  // If the document being deleted holds the highest sequence number issued
+  // so far for its doc_type+year, roll the counter back by one so the next
+  // document created reuses that number instead of leaving a permanent gap.
+  // Only the single most-recently-issued number is ever reclaimed this way —
+  // deleting an older document never touches the counter — so the original
+  // multi-branch guarantee (two branches can never be handed the same number)
+  // stays intact except for this one narrow, low-risk case.
+  async function rollBackCounterIfLatest(docType, docNumber) {
+    const parts = String(docNumber || '').split('-');
+    const seq = parseInt(parts[parts.length - 1], 10);
+    const year = parseInt(parts[parts.length - 2], 10);
+    if (!seq || !year) return;
+    const { data } = await client.from('counters').select('last_seq').eq('doc_type', docType).eq('year', year).maybeSingle();
+    if (data && data.last_seq === seq) {
+      await client.from('counters').update({ last_seq: seq - 1 }).eq('doc_type', docType).eq('year', year);
+    }
   }
 
   return {
@@ -55,6 +73,34 @@ function createRemoteStore(client) {
       return true;
     },
 
+    // ---- Suppliers ----
+    async listSuppliers(search) {
+      let q = client.from('suppliers').select('*').order('name');
+      if (search) q = q.or(`name.ilike.%${search}%,gstin.ilike.%${search}%`);
+      return unwrap(await q);
+    },
+    async getSupplier(id) {
+      const { data, error } = await client.from('suppliers').select('*').eq('id', id).maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async createSupplier(s) {
+      const uid = await currentUserId();
+      return unwrap(await client.from('suppliers')
+        .insert({ ...normalizeSupplier(s), created_by: uid, updated_by: uid })
+        .select().single());
+    },
+    async updateSupplier(id, s) {
+      const uid = await currentUserId();
+      return unwrap(await client.from('suppliers')
+        .update({ ...normalizeSupplier(s), updated_at: new Date().toISOString(), updated_by: uid })
+        .eq('id', id).select().single());
+    },
+    async deleteSupplier(id) {
+      unwrap(await client.from('suppliers').delete().eq('id', id));
+      return true;
+    },
+
     // ---- Products ----
     async listProducts(search) {
       let q = client.from('products').select('*').order('description');
@@ -85,11 +131,19 @@ function createRemoteStore(client) {
       if (filters.docType) q = q.eq('doc_type', filters.docType);
       if (filters.search) q = q.ilike('doc_number', `%${filters.search}%`);
       const rows = unwrap(await q);
-      return rows.map(d => ({ ...d, customer_name: d.customer_snapshot ? d.customer_snapshot.name : null }));
+      return rows.map(d => ({
+        ...d,
+        customer_name: d.customer_snapshot ? d.customer_snapshot.name : null,
+        supplier_name: d.supplier_snapshot ? d.supplier_snapshot.name : null
+      }));
     },
     async listDeletedDocuments() {
       const rows = unwrap(await client.from('documents').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }));
-      return rows.map(d => ({ ...d, customer_name: d.customer_snapshot ? d.customer_snapshot.name : null }));
+      return rows.map(d => ({
+        ...d,
+        customer_name: d.customer_snapshot ? d.customer_snapshot.name : null,
+        supplier_name: d.supplier_snapshot ? d.supplier_snapshot.name : null
+      }));
     },
     async getDocument(id) {
       const { data: doc, error } = await client.from('documents').select('*').eq('id', id).maybeSingle();
@@ -134,13 +188,21 @@ function createRemoteStore(client) {
     },
     async deleteDocument(id) {
       const uid = await currentUserId();
+      const doc = unwrap(await client.from('documents').select('doc_type, doc_number').eq('id', id).single());
       unwrap(await client.from('documents')
         .update({ deleted_at: new Date().toISOString(), updated_by: uid })
         .eq('id', id));
+      await rollBackCounterIfLatest(doc.doc_type, doc.doc_number);
       return true;
     },
     async restoreDocument(id) {
       const uid = await currentUserId();
+      const doc = unwrap(await client.from('documents').select('doc_number').eq('id', id).single());
+      const clashes = unwrap(await client.from('documents')
+        .select('id').eq('doc_number', doc.doc_number).is('deleted_at', null).neq('id', id));
+      if (clashes.length > 0) {
+        throw new Error(`Cannot restore — ${doc.doc_number} has already been reused by a newer document. Use "Duplicate As" to recreate this one under a new number instead.`);
+      }
       unwrap(await client.from('documents')
         .update({ deleted_at: null, updated_by: uid })
         .eq('id', id));
@@ -153,7 +215,7 @@ function createRemoteStore(client) {
     async setPaymentStatus(id, status, details) {
       const uid = await currentUserId();
       const fields = { payment_status: status, updated_at: new Date().toISOString(), updated_by: uid };
-      if (status === 'paid') {
+      if (status === 'paid' || status === 'partial') {
         fields.payment_date = (details && details.payment_date) || new Date().toISOString().slice(0, 10);
         fields.payment_amount = (details && details.payment_amount) || null;
         fields.payment_reference = (details && details.payment_reference) || null;
@@ -195,19 +257,42 @@ function createRemoteStore(client) {
 
       const today = new Date().toISOString().slice(0, 10);
       const unpaidRows = unwrap(await client.from('documents')
-        .select('id, doc_number, total, due_date, customer_snapshot')
+        .select('id, doc_number, total, due_date, customer_snapshot, payment_status, payment_amount')
         .is('deleted_at', null)
         .eq('doc_type', 'tax_invoice')
-        .eq('payment_status', 'unpaid'));
-      const outstanding = unpaidRows.map(d => ({
-        id: d.id, doc_number: d.doc_number, total: d.total, due_date: d.due_date,
-        customer_name: d.customer_snapshot ? d.customer_snapshot.name : null,
-        overdue: d.due_date ? d.due_date < today : false
-      }));
-      const outstandingTotal = outstanding.reduce((s, d) => s + (Number(d.total) || 0), 0);
-      const overdueTotal = outstanding.filter(d => d.overdue).reduce((s, d) => s + (Number(d.total) || 0), 0);
+        .in('payment_status', ['unpaid', 'partial']));
+      const outstanding = unpaidRows.map(d => {
+        const balance = d.payment_status === 'partial'
+          ? Math.max(0, (Number(d.total) || 0) - (Number(d.payment_amount) || 0))
+          : Number(d.total) || 0;
+        return {
+          id: d.id, doc_number: d.doc_number, total: d.total, balance, due_date: d.due_date,
+          customer_name: d.customer_snapshot ? d.customer_snapshot.name : null,
+          partial: d.payment_status === 'partial',
+          overdue: d.due_date ? d.due_date < today : false
+        };
+      });
+      const outstandingTotal = outstanding.reduce((s, d) => s + d.balance, 0);
+      const overdueTotal = outstanding.filter(d => d.overdue).reduce((s, d) => s + d.balance, 0);
 
-      return { ...summary, topCustomers, outstanding, outstandingTotal, overdueTotal };
+      // Quotations nearing/past their valid-until date — a nudge to follow up
+      // before the customer's interest lapses (no conversion-lineage tracking,
+      // so this is just "unconverted-looking" quotations by expiry proximity).
+      const followUpCutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const quotationRows = unwrap(await client.from('documents')
+        .select('id, doc_number, total, valid_until, customer_snapshot')
+        .is('deleted_at', null)
+        .eq('doc_type', 'quotation')
+        .not('valid_until', 'is', null)
+        .lte('valid_until', followUpCutoff)
+        .order('valid_until'));
+      const quotationFollowUps = quotationRows.map(d => ({
+        id: d.id, doc_number: d.doc_number, total: d.total, valid_until: d.valid_until,
+        customer_name: d.customer_snapshot ? d.customer_snapshot.name : null,
+        expired: d.valid_until < today
+      }));
+
+      return { ...summary, topCustomers, outstanding, outstandingTotal, overdueTotal, quotationFollowUps };
     }
   };
 }
@@ -216,10 +301,19 @@ function formatDocNumber(docType, year, seq) {
   return `${PREFIXES[docType]}-${year}-${String(seq).padStart(3, '0')}`;
 }
 
+function normalizeSupplier(s) {
+  return {
+    name: s.name || '', address: s.address || '', city: s.city || '',
+    state: s.state || '', pincode: s.pincode || '', mobile: s.mobile || '',
+    email: s.email || '', gstin: s.gstin || ''
+  };
+}
+
 function normalizeCustomer(c) {
   return {
     name: c.name || '', address: c.address || '', city: c.city || '',
-    state: c.state || '', pincode: c.pincode || '', mobile: c.mobile || '', gstin: c.gstin || ''
+    state: c.state || '', pincode: c.pincode || '', mobile: c.mobile || '', gstin: c.gstin || '',
+    email: c.email || ''
   };
 }
 

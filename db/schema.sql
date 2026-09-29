@@ -176,3 +176,92 @@ drop policy if exists "authenticated write app-updates" on storage.objects;
 create policy "authenticated write app-updates" on storage.objects for all
   using (bucket_id = 'app-updates' and auth.role() = 'authenticated')
   with check (bucket_id = 'app-updates' and auth.role() = 'authenticated');
+
+-- ---------- Migration: Delivery Challan, signature, customer email ----------
+-- Safe to re-run.
+alter table documents drop constraint if exists documents_doc_type_check;
+alter table documents add constraint documents_doc_type_check
+  check (doc_type in ('quotation', 'proforma', 'tax_invoice', 'delivery_challan'));
+
+alter table documents add column if not exists vehicle_no text;
+alter table documents add column if not exists transporter_name text;
+alter table documents add column if not exists driver_name text;
+alter table documents add column if not exists driver_contact text;
+alter table documents add column if not exists place_of_delivery text;
+alter table documents add column if not exists transport_reason text;
+
+alter table company_settings add column if not exists signature_data_uri text;
+alter table customers add column if not exists email text;
+alter table company_settings add column if not exists delete_password_hash text;
+alter table company_settings add column if not exists signature_enabled boolean default true;
+alter table documents add column if not exists include_signature boolean default true;
+alter table company_settings add column if not exists stamp_data_uri text;
+alter table company_settings add column if not exists stamp_enabled boolean default true;
+alter table documents add column if not exists include_stamp boolean default true;
+
+-- ---------- Migration: Ship To address (per-document, defaults to Bill To) ----------
+alter table documents add column if not exists ship_to_same boolean default true;
+alter table documents add column if not exists ship_to_name text;
+alter table documents add column if not exists ship_to_address text;
+alter table documents add column if not exists ship_to_city text;
+alter table documents add column if not exists ship_to_state text;
+alter table documents add column if not exists ship_to_pincode text;
+
+-- ---------- Migration: Project Name / Enquiry No (quotation, proforma) ----------
+alter table documents add column if not exists project_name text;
+alter table documents add column if not exists enquiry_no text;
+
+-- ---------- Migration: Purchase Order (HV -> Supplier) ----------
+create table if not exists suppliers (
+  id bigint generated always as identity primary key,
+  name text not null,
+  address text, city text, state text, pincode text, mobile text, email text, gstin text,
+  created_at timestamptz default now(),
+  created_by uuid,
+  updated_at timestamptz default now(),
+  updated_by uuid
+);
+alter table suppliers enable row level security;
+drop policy if exists "authenticated full access" on suppliers;
+create policy "authenticated full access" on suppliers for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+alter table documents drop constraint if exists documents_doc_type_check;
+alter table documents add constraint documents_doc_type_check
+  check (doc_type in ('quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order'));
+
+alter table documents add column if not exists supplier_id bigint references suppliers(id) on delete set null;
+alter table documents add column if not exists supplier_snapshot jsonb;
+alter table documents add column if not exists deliver_to_same boolean default true;
+alter table documents add column if not exists deliver_to_name text;
+alter table documents add column if not exists deliver_to_address text;
+alter table documents add column if not exists deliver_to_city text;
+alter table documents add column if not exists deliver_to_state text;
+alter table documents add column if not exists deliver_to_pincode text;
+alter table company_settings add column if not exists purchase_order_terms text;
+
+-- ---------- Migration: fixed pump spec fields per item (optional, toggle per item) ----------
+alter table document_items add column if not exists use_structured_specs boolean default false;
+alter table document_items add column if not exists spec_flow_head text;
+alter table document_items add column if not exists spec_model text;
+alter table document_items add column if not exists spec_kw_rpm text;
+alter table document_items add column if not exists spec_moc text;
+
+-- ---------- Migration: engine spec / engine accessories per item (diesel-engine driven pumps, independent toggles) ----------
+alter table document_items add column if not exists use_engine_spec boolean default false;
+alter table document_items add column if not exists spec_engine text;
+alter table document_items add column if not exists use_engine_accessories boolean default false;
+alter table document_items add column if not exists spec_engine_accessories text;
+
+-- ---------- Migration: Revised Offer toggle (quotation, proforma) ----------
+alter table documents add column if not exists is_revised boolean default false;
+alter table documents add column if not exists revision_no int default 0;
+
+-- ---------- Migration: Purchase Order commercial terms + delivery info ----------
+alter table documents add column if not exists price_basis text;
+alter table documents add column if not exists payment_terms text;
+alter table documents add column if not exists packing_terms text;
+alter table documents add column if not exists freight_terms text;
+alter table documents add column if not exists delivery_schedule text;
+alter table documents add column if not exists delivery_type text;
+alter table documents add column if not exists transportation text;

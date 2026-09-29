@@ -20,6 +20,13 @@ contextBridge.exposeInMainWorld('api', {
     update: (id, c) => ipcRenderer.invoke('customers:update', id, c),
     delete: (id) => ipcRenderer.invoke('customers:delete', id)
   },
+  suppliers: {
+    list: (search) => ipcRenderer.invoke('suppliers:list', search),
+    get: (id) => ipcRenderer.invoke('suppliers:get', id),
+    create: (s) => ipcRenderer.invoke('suppliers:create', s),
+    update: (id, s) => ipcRenderer.invoke('suppliers:update', id, s),
+    delete: (id) => ipcRenderer.invoke('suppliers:delete', id)
+  },
   products: {
     list: (search) => ipcRenderer.invoke('products:list', search),
     create: (p) => ipcRenderer.invoke('products:create', p),
@@ -42,15 +49,24 @@ contextBridge.exposeInMainWorld('api', {
   },
   document: {
     savePdf: (html, suggestedName) => ipcRenderer.invoke('document:save_pdf', html, suggestedName),
-    print: (html) => ipcRenderer.invoke('document:print', html)
+    print: (html) => ipcRenderer.invoke('document:print', html),
+    revealInFolder: (filePath) => ipcRenderer.invoke('document:reveal_in_folder', filePath),
+    openMailto: (opts) => ipcRenderer.invoke('document:open_mailto', opts),
+    openExternal: (url) => ipcRenderer.invoke('document:open_external', url)
   },
   branch: {
     get: () => ipcRenderer.invoke('branch:get'),
     set: (name) => ipcRenderer.invoke('branch:set', name)
   },
+  security: {
+    hasDeletePassword: () => ipcRenderer.invoke('security:has_delete_password'),
+    setDeletePassword: (password) => ipcRenderer.invoke('security:set_delete_password', password),
+    verifyDeletePassword: (password) => ipcRenderer.invoke('security:verify_delete_password', password)
+  },
   exportExcel: {
     documents: (filters) => ipcRenderer.invoke('export:documents_excel', filters),
-    customers: () => ipcRenderer.invoke('export:customers_excel')
+    customers: () => ipcRenderer.invoke('export:customers_excel'),
+    gstr1: (filters) => ipcRenderer.invoke('export:gstr1_excel', filters)
   },
   updates: {
     getVersion: () => ipcRenderer.invoke('app:get_version'),

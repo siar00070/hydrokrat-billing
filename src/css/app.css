@@ -226,6 +226,13 @@ table.data-table tr:hover td { background: #f8fafc; }
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
+
+.recent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.recent-grid .card { margin-bottom: 0; }
 .quick-create-card {
   background: #fff;
   border-radius: 8px;
@@ -251,6 +258,8 @@ table.data-table tr:hover td { background: #f8fafc; }
 .badge.quotation { background: #6b7280; }
 .badge.proforma { background: #2563eb; }
 .badge.tax_invoice { background: #0e3a5f; }
+.badge.delivery_challan { background: #b45309; }
+.badge.purchase_order { background: #5b21b6; }
 
 .payment-badge {
   display: inline-block;
@@ -262,6 +271,7 @@ table.data-table tr:hover td { background: #f8fafc; }
 .payment-badge.paid { background: #dcfce7; color: #166534; }
 .payment-badge.unpaid { background: #fef3c7; color: #92400e; }
 .payment-badge.overdue { background: #fee2e2; color: #991b1b; }
+.payment-badge.partial { background: #dbeafe; color: #1e40af; }
 
 .stat-row { display: flex; gap: 24px; flex-wrap: wrap; }
 .stat-value { font-size: 22px; font-weight: 700; color: #0e3a5f; }
@@ -277,7 +287,8 @@ table.data-table tr:hover td { background: #f8fafc; }
 .items-editor-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
 .items-editor-table th { text-align: left; font-size: 11px; color: #6b7280; padding: 6px 6px; }
 .items-editor-table td { padding: 4px 6px; vertical-align: top; }
-.items-editor-table input, .items-editor-table select { font-size: 12.5px; padding: 6px 8px; }
+.items-editor-table input, .items-editor-table select, .items-editor-table textarea { font-size: 12.5px; padding: 6px 8px; }
+.items-editor-table textarea { width: 100%; resize: vertical; font-family: inherit; }
 .items-editor-table .col-desc { width: 32%; }
 .items-editor-table .col-hsn { width: 12%; }
 .items-editor-table .col-qty { width: 8%; }
@@ -285,6 +296,11 @@ table.data-table tr:hover td { background: #f8fafc; }
 .items-editor-table .col-gst { width: 10%; }
 .items-editor-table .col-amt { width: 12%; text-align: right; padding-top: 10px; font-weight: 600; }
 .items-editor-table .col-del { width: 4%; text-align: center; }
+
+.item-specs-row td { background: #f8fafc; padding: 8px 10px 10px; }
+.item-specs-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+.item-specs-grid .field { flex: 1; min-width: 150px; margin-bottom: 0; }
+.item-specs-grid label { font-size: 10.5px; }
 
 .totals-panel {
   width: 320px;

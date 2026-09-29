@@ -76,6 +76,7 @@ function openCustomerModal(customer, onSaved) {
   const pincodeInput = el('input', { value: customer ? customer.pincode || '' : '' });
   const mobileInput = el('input', { value: customer ? customer.mobile || '' : '' });
   const gstinInput = el('input', { value: customer ? customer.gstin || '' : '' });
+  const emailInput = el('input', { type: 'email', value: customer ? customer.email || '' : '' });
 
   const scanBtn = el('button', {
     class: 'btn secondary small', style: 'margin-bottom:14px',
@@ -88,6 +89,7 @@ function openCustomerModal(customer, onSaved) {
         if (!pincodeInput.value.trim() && fields.pincode) pincodeInput.value = fields.pincode;
         if (!mobileInput.value.trim() && fields.mobile) mobileInput.value = fields.mobile;
         if (!gstinInput.value.trim() && fields.gstin) gstinInput.value = fields.gstin;
+        if (!emailInput.value.trim() && fields.email) emailInput.value = fields.email;
         scanBtn.textContent = '📷 Scan to fill (business card / GST certificate)';
         scanBtn.disabled = false;
         showToast('Scanned — please double-check the fields below');
@@ -115,14 +117,17 @@ function openCustomerModal(customer, onSaved) {
       el('div', { class: 'field' }, [el('label', {}, ['Pincode']), pincodeInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Mobile']), mobileInput])
     ]),
-    el('div', { class: 'field' }, [el('label', {}, ['GSTIN']), gstinInput]),
+    el('div', { class: 'field-row' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['GSTIN']), gstinInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Email (for Send)']), emailInput])
+    ]),
     el('div', { class: 'btn-row' }, [
       el('button', { class: 'btn', onclick: async () => {
         const payload = {
           name: nameInput.value.trim(), address: addressInput.value.trim(),
           city: cityInput.value.trim(), state: stateSelect.value,
           pincode: pincodeInput.value.trim(), mobile: mobileInput.value.trim(),
-          gstin: gstinInput.value.trim()
+          gstin: gstinInput.value.trim(), email: emailInput.value.trim()
         };
         if (!payload.name) { showToast('Name is required'); return; }
         if (isEdit) await window.api.customers.update(customer.id, payload);

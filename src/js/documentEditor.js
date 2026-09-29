@@ -1,8 +1,9 @@
-const DOC_TYPE_LABELS = { quotation: 'Quotation', proforma: 'Proforma Invoice', tax_invoice: 'Tax Invoice' };
+const DOC_TYPE_LABELS = { quotation: 'Quotation', proforma: 'Proforma Invoice', tax_invoice: 'Tax Invoice', delivery_challan: 'Delivery Challan', purchase_order: 'Purchase Order' };
 
 async function renderDocumentEditor(root, params) {
   const settings = await window.api.settings.get();
   let customers = await window.api.customers.list();
+  let suppliers = await window.api.suppliers.list();
   let products = await window.api.products.list();
 
   let doc = null;
@@ -19,12 +20,31 @@ async function renderDocumentEditor(root, params) {
     docDate: doc ? doc.doc_date : new Date().toISOString().slice(0, 10),
     validUntil: doc ? doc.valid_until : addDays(new Date(), 15),
     customerId: doc ? doc.customer_id : null,
+    supplierId: doc ? doc.supplier_id : null,
     placeOfSupply: doc ? doc.place_of_supply : '',
     discount: doc ? doc.discount : 0,
     terms: doc ? doc.terms : settings[termsKeyFor(docType)],
     notes: doc ? doc.notes : settings.default_notes,
     dueDate: doc ? doc.due_date : addDays(new Date(), 30),
     paymentStatus: doc ? (doc.payment_status || 'unpaid') : 'unpaid',
+    includeSignature: doc ? (doc.include_signature !== false) : (settings.signature_enabled !== false),
+    includeStamp: doc ? (doc.include_stamp !== false) : (settings.stamp_enabled !== false),
+    shipToSame: doc ? (doc.ship_to_same !== false) : true,
+    shipToName: doc ? doc.ship_to_name || '' : '',
+    shipToAddress: doc ? doc.ship_to_address || '' : '',
+    shipToCity: doc ? doc.ship_to_city || '' : '',
+    shipToState: doc ? doc.ship_to_state || '' : '',
+    shipToPincode: doc ? doc.ship_to_pincode || '' : '',
+    projectName: doc ? doc.project_name || '' : '',
+    enquiryNo: doc ? doc.enquiry_no || '' : '',
+    deliverToSame: doc ? (doc.deliver_to_same !== false) : true,
+    deliverToName: doc ? doc.deliver_to_name || '' : '',
+    deliverToAddress: doc ? doc.deliver_to_address || '' : '',
+    deliverToCity: doc ? doc.deliver_to_city || '' : '',
+    deliverToState: doc ? doc.deliver_to_state || '' : '',
+    deliverToPincode: doc ? doc.deliver_to_pincode || '' : '',
+    isRevised: doc ? !!doc.is_revised : false,
+    revisionNo: doc ? (doc.revision_no || 0) : 0,
     items: doc ? doc.items.map(it => ({ ...it })) : [emptyItem()]
   };
 
@@ -33,7 +53,7 @@ async function renderDocumentEditor(root, params) {
   // ---- Doc type tabs (only for brand-new documents) ----
   if (!doc) {
     const tabRow = el('div', { class: 'btn-row', style: 'margin-bottom:14px' });
-    ['quotation', 'proforma', 'tax_invoice'].forEach(t => {
+    ['quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order'].forEach(t => {
       tabRow.appendChild(el('button', {
         class: `btn ${t === state.docType ? '' : 'secondary'}`,
         onclick: () => {
@@ -56,65 +76,230 @@ async function renderDocumentEditor(root, params) {
     el('div', {}, [
       el('div', { style: 'font-size:11px;color:#6b7280;font-weight:600' }, ['DOCUMENT NUMBER']),
       el('div', { style: 'font-size:16px;font-weight:700;color:#0e3a5f' }, [numberPreview])
-    ])
-  ]));
+    ]),
+    doc ? el('div', { style: 'font-size:11px;color:#6b7280;text-align:right' }, [
+      doc.branch_name ? el('div', {}, ['Branch: ' + doc.branch_name]) : null,
+      doc.created_at ? el('div', {}, ['Created: ' + fmtDate(doc.created_at)]) : null,
+      doc.updated_at && doc.updated_at !== doc.created_at ? el('div', {}, ['Updated: ' + fmtDate(doc.updated_at)]) : null
+    ].filter(Boolean)) : null
+  ].filter(Boolean)));
 
-  // ---- Customer + dates ----
+  // ---- Customer/Supplier + dates ----
+  const isPO = docType === 'purchase_order';
   const customerSelect = el('select', {}, buildCustomerOptions(customers, state.customerId));
+  const supplierSelect = el('select', {}, buildSupplierOptions(suppliers, state.supplierId));
   const dateInput = el('input', { type: 'date', value: state.docDate });
   const validUntilInput = el('input', { type: 'date', value: state.validUntil || '' });
   const placeOfSupplySelect = el('select', {}, [
-    el('option', { value: '' }, ['Same as customer state']),
+    el('option', { value: '' }, [isPO ? 'Same as supplier state' : 'Same as customer state']),
     ...INDIAN_STATES.map(s => el('option', { value: s, ...(state.placeOfSupply === s ? { selected: 'selected' } : {}) }, [s]))
   ]);
 
   const metaRow = el('div', { class: 'field-row' }, [
     el('div', { class: 'field' }, [
-      el('label', {}, ['Customer']),
-      customerSelect
+      el('label', {}, [isPO ? 'Supplier' : 'Customer']),
+      isPO ? supplierSelect : customerSelect
     ])
   ]);
   metaRow.appendChild(el('div', { style: 'align-self:flex-end;margin-bottom:12px' }, [
-    el('button', { class: 'btn secondary small', onclick: () => openCustomerModal(null, async (c) => {
-      customers = await window.api.customers.list();
-      customerSelect.innerHTML = '';
-      buildCustomerOptions(customers, null).forEach(o => customerSelect.appendChild(o));
-    }) }, ['+ New'])
+    isPO
+      ? el('button', { class: 'btn secondary small', onclick: () => openSupplierModal(null, async () => {
+          suppliers = await window.api.suppliers.list();
+          supplierSelect.innerHTML = '';
+          buildSupplierOptions(suppliers, null).forEach(o => supplierSelect.appendChild(o));
+        }) }, ['+ New'])
+      : el('button', { class: 'btn secondary small', onclick: () => openCustomerModal(null, async (c) => {
+          customers = await window.api.customers.list();
+          customerSelect.innerHTML = '';
+          buildCustomerOptions(customers, null).forEach(o => customerSelect.appendChild(o));
+        }) }, ['+ New'])
   ]));
   card.appendChild(metaRow);
 
   const dateRow = el('div', { class: 'field-row' }, [
     el('div', { class: 'field' }, [el('label', {}, ['Date']), dateInput])
   ]);
-  if (docType !== 'tax_invoice') {
+  if (docType !== 'tax_invoice' && docType !== 'delivery_challan' && docType !== 'purchase_order') {
     dateRow.appendChild(el('div', { class: 'field' }, [el('label', {}, ['Valid Until']), validUntilInput]));
   }
   dateRow.appendChild(el('div', { class: 'field' }, [el('label', {}, ['Place of Supply (GST)']), placeOfSupplySelect]));
   card.appendChild(dateRow);
 
+  let projectNameInput, enquiryNoInput;
+  if (docType === 'quotation' || docType === 'proforma' || docType === 'purchase_order') {
+    projectNameInput = el('input', { value: state.projectName });
+    enquiryNoInput = el('input', { value: state.enquiryNo });
+    card.appendChild(el('div', { class: 'field-row' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['Project Name']), projectNameInput]),
+      el('div', { class: 'field' }, [el('label', {}, [docType === 'purchase_order' ? 'Quotation Ref.' : 'Enquiry No.']), enquiryNoInput])
+    ]));
+  }
+
+  let revisedInput, revisionLabelSpan;
+  if (docType === 'quotation' || docType === 'proforma') {
+    revisedInput = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+    revisedInput.checked = state.isRevised;
+    revisionLabelSpan = el('span', { style: 'font-weight:600;color:#0e3a5f' }, [
+      state.isRevised && state.revisionNo ? ` (currently Rev.${state.revisionNo})` : ''
+    ]);
+    revisedInput.addEventListener('change', () => {
+      if (revisedInput.checked) {
+        dateInput.value = new Date().toISOString().slice(0, 10);
+        state.revisionNo = (state.revisionNo || 0) + 1;
+        revisionLabelSpan.textContent = ` (will print as Rev.${state.revisionNo})`;
+      } else {
+        revisionLabelSpan.textContent = '';
+      }
+    });
+    card.appendChild(el('div', { style: 'margin-top:4px;margin-bottom:14px' }, [
+      el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:12.5px;color:#374151;cursor:pointer' }, [
+        revisedInput, 'Revised Offer — updates the date to today and marks this as a revision', revisionLabelSpan
+      ])
+    ]));
+  }
+
   let dueDateInput, paymentStatusSelect;
   if (docType === 'tax_invoice') {
     dueDateInput = el('input', { type: 'date', value: state.dueDate || '' });
-    const isPaid = doc && doc.payment_status === 'paid';
-    paymentStatusSelect = el('select', { ...(isPaid ? { disabled: 'disabled' } : {}) }, [
+    const isSettled = doc && (doc.payment_status === 'paid' || doc.payment_status === 'partial');
+    paymentStatusSelect = el('select', { ...(isSettled ? { disabled: 'disabled' } : {}) }, [
       el('option', { value: 'unpaid', ...(state.paymentStatus === 'unpaid' ? { selected: 'selected' } : {}) }, ['Unpaid']),
+      el('option', { value: 'partial', ...(state.paymentStatus === 'partial' ? { selected: 'selected' } : {}) }, ['Partial']),
       el('option', { value: 'paid', ...(state.paymentStatus === 'paid' ? { selected: 'selected' } : {}) }, ['Paid'])
     ]);
     card.appendChild(el('div', { class: 'field-row' }, [
       el('div', { class: 'field' }, [el('label', {}, ['Payment Due Date']), dueDateInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Payment Status']), paymentStatusSelect])
     ]));
-    if (isPaid) {
+    if (isSettled) {
+      const balance = doc.payment_status === 'partial' ? (doc.total - (doc.payment_amount || 0)) : 0;
       const details = [
-        doc.payment_date ? `Paid on ${fmtDate(doc.payment_date)}` : null,
+        doc.payment_date ? `${doc.payment_status === 'partial' ? 'Last payment' : 'Paid'} on ${fmtDate(doc.payment_date)}` : null,
         doc.payment_amount ? `Amount received: ${fmtMoney(doc.payment_amount)}` : null,
+        doc.payment_status === 'partial' ? `Balance due: ${fmtMoney(balance)}` : null,
         doc.payment_reference ? `Reference: ${doc.payment_reference}` : null
       ].filter(Boolean).join('  •  ');
-      card.appendChild(el('div', { style: 'font-size:12px;color:#166534;background:#dcfce7;padding:8px 12px;border-radius:6px;margin:-8px 0 14px 0' }, [
-        details || 'Marked as paid.',
-        ' — use Mark Unpaid from the Documents list to change this.'
+      const bg = doc.payment_status === 'partial' ? '#fef3c7' : '#dcfce7';
+      const fg = doc.payment_status === 'partial' ? '#92400e' : '#166534';
+      card.appendChild(el('div', { style: `font-size:12px;color:${fg};background:${bg};padding:8px 12px;border-radius:6px;margin:-8px 0 14px 0` }, [
+        details || (doc.payment_status === 'partial' ? 'Partially paid.' : 'Marked as paid.'),
+        ' — use Mark Paid/Unpaid from the Documents list to change this.'
       ]));
     }
+  }
+
+  // ---- Ship To (defaults to Bill To / customer address; editable per document) ----
+  const shipToSameInput = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+  shipToSameInput.checked = state.shipToSame;
+  const shipToNameInput = el('input', { value: state.shipToName });
+  const shipToAddressInput = el('textarea', { rows: 2 }, [state.shipToAddress]);
+  const shipToCityInput = el('input', { value: state.shipToCity });
+  const shipToStateSelect = el('select', {}, [
+    el('option', { value: '' }, ['Select state']),
+    ...INDIAN_STATES.map(s => el('option', { value: s, ...(state.shipToState === s ? { selected: 'selected' } : {}) }, [s]))
+  ]);
+  const shipToPincodeInput = el('input', { value: state.shipToPincode });
+  const shipToFields = el('div', {}, [
+    el('div', { class: 'field' }, [el('label', {}, ['Ship To Name / Site']), shipToNameInput]),
+    el('div', { class: 'field' }, [el('label', {}, ['Ship To Address']), shipToAddressInput]),
+    el('div', { class: 'field-row' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['City']), shipToCityInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['State']), shipToStateSelect]),
+      el('div', { class: 'field' }, [el('label', {}, ['Pincode']), shipToPincodeInput])
+    ])
+  ]);
+  shipToFields.style.display = state.shipToSame ? 'none' : 'block';
+  shipToSameInput.addEventListener('change', () => {
+    shipToFields.style.display = shipToSameInput.checked ? 'none' : 'block';
+  });
+  if (!isPO) {
+    card.appendChild(el('div', { style: 'margin-top:14px' }, [
+      el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:12.5px;color:#374151;cursor:pointer;margin-bottom:8px' }, [
+        shipToSameInput, 'Ship to same address as Bill To'
+      ]),
+      shipToFields
+    ]));
+  }
+
+  // ---- Deliver To (purchase orders only — defaults to our own company address) ----
+  const deliverToSameInput = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+  deliverToSameInput.checked = state.deliverToSame;
+  const deliverToNameInput = el('input', { value: state.deliverToName });
+  const deliverToAddressInput = el('textarea', { rows: 2 }, [state.deliverToAddress]);
+  const deliverToCityInput = el('input', { value: state.deliverToCity });
+  const deliverToStateSelect = el('select', {}, [
+    el('option', { value: '' }, ['Select state']),
+    ...INDIAN_STATES.map(s => el('option', { value: s, ...(state.deliverToState === s ? { selected: 'selected' } : {}) }, [s]))
+  ]);
+  const deliverToPincodeInput = el('input', { value: state.deliverToPincode });
+  const deliverToFields = el('div', {}, [
+    el('div', { class: 'field' }, [el('label', {}, ['Deliver To Name / Site']), deliverToNameInput]),
+    el('div', { class: 'field' }, [el('label', {}, ['Deliver To Address']), deliverToAddressInput]),
+    el('div', { class: 'field-row' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['City']), deliverToCityInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['State']), deliverToStateSelect]),
+      el('div', { class: 'field' }, [el('label', {}, ['Pincode']), deliverToPincodeInput])
+    ])
+  ]);
+  deliverToFields.style.display = state.deliverToSame ? 'none' : 'block';
+  deliverToSameInput.addEventListener('change', () => {
+    deliverToFields.style.display = deliverToSameInput.checked ? 'none' : 'block';
+  });
+  let priceBasisInput, paymentTermsPoInput, packingTermsInput, freightTermsInput, deliveryScheduleInput, deliveryTypeInput, transportationInput;
+  if (isPO) {
+    card.appendChild(el('div', { style: 'margin-top:14px' }, [
+      el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:12.5px;color:#374151;cursor:pointer;margin-bottom:8px' }, [
+        deliverToSameInput, 'Deliver to our own company address'
+      ]),
+      deliverToFields
+    ]));
+
+    priceBasisInput = el('input', { value: doc ? doc.price_basis || '' : '', placeholder: 'e.g. Ex-Works' });
+    paymentTermsPoInput = el('input', { value: doc ? doc.payment_terms || '' : '', placeholder: 'e.g. 10% Rolling Advance, 90% Against LR Document' });
+    packingTermsInput = el('input', { value: doc ? doc.packing_terms || '' : '', placeholder: 'e.g. Included' });
+    freightTermsInput = el('input', { value: doc ? doc.freight_terms || '' : '', placeholder: 'e.g. To-pay' });
+    deliveryScheduleInput = el('input', { value: doc ? doc.delivery_schedule || '' : '', placeholder: 'e.g. 14-16 Working Weeks' });
+    deliveryTypeInput = el('input', { value: doc ? doc.delivery_type || '' : '', placeholder: 'e.g. Godown Delivery' });
+    transportationInput = el('input', { value: doc ? doc.transportation || '' : '', placeholder: 'e.g. By Road' });
+
+    card.appendChild(el('div', { style: 'margin-top:14px' }, [
+      el('h3', { style: 'font-size:13px;color:#0e3a5f;margin:0 0 10px' }, ['Commercial Terms']),
+      el('div', { class: 'field-row' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['Price Basis']), priceBasisInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Terms of Payment']), paymentTermsPoInput])
+      ]),
+      el('div', { class: 'field-row' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['Packing']), packingTermsInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Freight']), freightTermsInput])
+      ]),
+      el('div', { class: 'field-row' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['Delivery Schedule']), deliveryScheduleInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Delivery Type']), deliveryTypeInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Transportation']), transportationInput])
+      ])
+    ]));
+  }
+
+  let vehicleInput, transporterInput, driverNameInput, driverContactInput, placeOfDeliveryInput, transportReasonInput;
+  if (docType === 'delivery_challan') {
+    vehicleInput = el('input', { value: doc ? doc.vehicle_no || '' : '' });
+    transporterInput = el('input', { value: doc ? doc.transporter_name || '' : '' });
+    driverNameInput = el('input', { value: doc ? doc.driver_name || '' : '' });
+    driverContactInput = el('input', { value: doc ? doc.driver_contact || '' : '' });
+    placeOfDeliveryInput = el('input', { value: doc ? doc.place_of_delivery || '' : '' });
+    transportReasonInput = el('input', { value: doc ? doc.transport_reason || '' : '', placeholder: 'e.g. Stock transfer, Job work, On approval' });
+    card.appendChild(el('div', { class: 'field-row' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['Vehicle No.']), vehicleInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Transporter Name']), transporterInput])
+    ]));
+    card.appendChild(el('div', { class: 'field-row' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['Driver Name']), driverNameInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Driver Contact']), driverContactInput])
+    ]));
+    card.appendChild(el('div', { class: 'field-row' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['Place of Delivery']), placeOfDeliveryInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Reason for Transport']), transportReasonInput])
+    ]));
   }
 
   // ---- Items table ----
@@ -155,8 +340,44 @@ async function renderDocumentEditor(root, params) {
         renderItems();
       });
 
-      const descInput = el('input', { value: item.description || '', placeholder: 'Item description' });
+      const useSpecs = !!item.use_structured_specs;
+      const descInput = useSpecs
+        ? el('input', { value: (item.description || '').split('\n')[0] || '', placeholder: 'Item title' })
+        : el('textarea', {
+            rows: 3,
+            placeholder: 'First line = item title (bold on the PDF). Add more lines below for specs — Flow & Head, Model, KW & RPM, MOC, etc.'
+          }, [item.description || '']);
       descInput.addEventListener('input', () => { item.description = descInput.value; });
+
+      const specsToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+      specsToggle.checked = useSpecs;
+      specsToggle.addEventListener('change', () => {
+        item.use_structured_specs = specsToggle.checked;
+        if (specsToggle.checked) {
+          // Switching on: keep only the title line, drop any free-typed detail lines.
+          item.description = (item.description || '').split('\n')[0] || '';
+        }
+        renderItems();
+      });
+      const specsToggleLabel = el('label', {
+        style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
+      }, [specsToggle, 'Use fixed pump spec fields']);
+
+      const useEngineSpec = !!item.use_engine_spec;
+      const engineSpecToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+      engineSpecToggle.checked = useEngineSpec;
+      engineSpecToggle.addEventListener('change', () => { item.use_engine_spec = engineSpecToggle.checked; renderItems(); });
+      const engineSpecToggleLabel = el('label', {
+        style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
+      }, [engineSpecToggle, 'Use engine spec field (diesel-driven pumps)']);
+
+      const useEngineAccessories = !!item.use_engine_accessories;
+      const engineAccessoriesToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+      engineAccessoriesToggle.checked = useEngineAccessories;
+      engineAccessoriesToggle.addEventListener('change', () => { item.use_engine_accessories = engineAccessoriesToggle.checked; renderItems(); });
+      const engineAccessoriesToggleLabel = el('label', {
+        style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
+      }, [engineAccessoriesToggle, 'Use engine accessories field']);
 
       const hsnInput = el('input', { value: item.hsn_sac || '' });
       hsnInput.addEventListener('input', () => { item.hsn_sac = hsnInput.value; });
@@ -173,7 +394,7 @@ async function renderDocumentEditor(root, params) {
       const amount = (item.qty || 0) * (item.rate || 0);
 
       itemsBody.appendChild(el('tr', {}, [
-        el('td', {}, [productSelect, descInput]),
+        el('td', {}, [productSelect, descInput, specsToggleLabel, engineSpecToggleLabel, engineAccessoriesToggleLabel]),
         el('td', {}, [hsnInput]),
         el('td', {}, [qtyInput]),
         el('td', {}, [rateInput]),
@@ -186,6 +407,42 @@ async function renderDocumentEditor(root, params) {
           }, ['✕'])
         ])
       ]));
+
+      const specFields = [];
+      if (useSpecs) {
+        const flowHeadInput = el('input', { value: item.spec_flow_head || '', placeholder: 'e.g. 137 CMH @ 70 M head' });
+        flowHeadInput.addEventListener('input', () => { item.spec_flow_head = flowHeadInput.value; });
+        const modelInput = el('input', { value: item.spec_model || '', placeholder: 'e.g. KSB ETN 100-080-250' });
+        modelInput.addEventListener('input', () => { item.spec_model = modelInput.value; });
+        const kwRpmInput = el('input', { value: item.spec_kw_rpm || '', placeholder: 'e.g. 45 KW @ 2974 RPM' });
+        kwRpmInput.addEventListener('input', () => { item.spec_kw_rpm = kwRpmInput.value; });
+        const mocInput = el('input', { value: item.spec_moc || '', placeholder: 'e.g. Cast iron casing, bronze impeller' });
+        mocInput.addEventListener('input', () => { item.spec_moc = mocInput.value; });
+        specFields.push(
+          el('div', { class: 'field' }, [el('label', {}, ['Flow & Head']), flowHeadInput]),
+          el('div', { class: 'field' }, [el('label', {}, ['Model']), modelInput]),
+          el('div', { class: 'field' }, [el('label', {}, ['KW & RPM']), kwRpmInput]),
+          el('div', { class: 'field' }, [el('label', {}, ['MOC']), mocInput])
+        );
+      }
+      if (useEngineSpec) {
+        const engineInput = el('input', { value: item.spec_engine || '', placeholder: 'e.g. 61HP/2900 RPM/KOEL RC/4R810/12V' });
+        engineInput.addEventListener('input', () => { item.spec_engine = engineInput.value; });
+        specFields.push(el('div', { class: 'field' }, [el('label', {}, ['Engine Spec']), engineInput]));
+      }
+      if (useEngineAccessories) {
+        const engineAccInput = el('input', { value: item.spec_engine_accessories || '', placeholder: 'e.g. 12V Battery, 300L Fuel Tank, Battery Charger, Residential silencer and cable' });
+        engineAccInput.addEventListener('input', () => { item.spec_engine_accessories = engineAccInput.value; });
+        specFields.push(el('div', { class: 'field' }, [el('label', {}, ['Engine Accessories']), engineAccInput]));
+      }
+
+      if (specFields.length > 0) {
+        itemsBody.appendChild(el('tr', { class: 'item-specs-row' }, [
+          el('td', { colspan: '7' }, [
+            el('div', { class: 'item-specs-grid' }, specFields)
+          ])
+        ]));
+      }
     });
     updateTotals();
   }
@@ -213,9 +470,11 @@ async function renderDocumentEditor(root, params) {
     const taxableAfterDiscount = Math.max(0, subtotal - discount);
     const effectiveTax = subtotal > 0 ? taxTotal * (taxableAfterDiscount / subtotal) : 0;
 
-    const customer = customers.find(c => String(c.id) === customerSelect.value);
-    const customerState = placeOfSupplySelect.value || (customer ? customer.state : '');
-    const sameState = (settings.state || '').trim().toLowerCase() === (customerState || '').trim().toLowerCase();
+    const party = isPO
+      ? suppliers.find(s => String(s.id) === supplierSelect.value)
+      : customers.find(c => String(c.id) === customerSelect.value);
+    const partyState = placeOfSupplySelect.value || (party ? party.state : '');
+    const sameState = (settings.state || '').trim().toLowerCase() === (partyState || '').trim().toLowerCase();
     let cgst = 0, sgst = 0, igst = 0;
     if (sameState) { cgst = round2(effectiveTax / 2); sgst = round2(effectiveTax / 2); }
     else igst = round2(effectiveTax);
@@ -238,6 +497,7 @@ async function renderDocumentEditor(root, params) {
   }
 
   customerSelect.addEventListener('change', updateTotals);
+  supplierSelect.addEventListener('change', updateTotals);
   placeOfSupplySelect.addEventListener('change', updateTotals);
   renderItems();
 
@@ -249,6 +509,24 @@ async function renderDocumentEditor(root, params) {
     el('div', { class: 'field' }, [el('label', {}, ['Notes']), notesInput])
   ]));
 
+  const includeSignatureInput = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+  includeSignatureInput.checked = state.includeSignature;
+  const includeStampInput = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+  includeStampInput.checked = state.includeStamp;
+
+  const toggleRow = el('div', { style: 'display:flex;gap:20px;margin-top:14px' });
+  if (settings.signature_data_uri && settings.signature_enabled !== false) {
+    toggleRow.appendChild(el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:12.5px;color:#374151;cursor:pointer' }, [
+      includeSignatureInput, 'Include signature'
+    ]));
+  }
+  if (settings.stamp_data_uri && settings.stamp_enabled !== false) {
+    toggleRow.appendChild(el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:12.5px;color:#374151;cursor:pointer' }, [
+      includeStampInput, 'Include stamp'
+    ]));
+  }
+  if (toggleRow.children.length > 0) card.appendChild(toggleRow);
+
   // ---- Actions ----
   const actionRow = el('div', { class: 'btn-row', style: 'margin-top:16px' });
   actionRow.appendChild(el('button', { class: 'btn secondary', onclick: () => navigate('documents') }, ['Cancel']));
@@ -256,18 +534,53 @@ async function renderDocumentEditor(root, params) {
     class: 'btn', onclick: async () => {
       const items = state.items.filter(it => it.description && it.description.trim());
       if (items.length === 0) { showToast('Add at least one item'); return; }
-      if (!customerSelect.value) { showToast('Please select a customer'); return; }
+      if (isPO ? !supplierSelect.value : !customerSelect.value) {
+        showToast(isPO ? 'Please select a supplier' : 'Please select a customer');
+        return;
+      }
       const payload = {
         doc_type: state.docType,
         doc_date: dateInput.value,
-        valid_until: docType !== 'tax_invoice' ? (validUntilInput.value || null) : null,
-        customer_id: parseInt(customerSelect.value, 10),
+        valid_until: (docType !== 'tax_invoice' && docType !== 'delivery_challan' && docType !== 'purchase_order') ? (validUntilInput.value || null) : null,
+        customer_id: isPO ? null : parseInt(customerSelect.value, 10),
+        supplier_id: isPO ? parseInt(supplierSelect.value, 10) : null,
         place_of_supply: placeOfSupplySelect.value || null,
         discount: parseFloat(discountInput.value) || 0,
         terms: termsInput.value,
         notes: notesInput.value,
         due_date: docType === 'tax_invoice' ? (dueDateInput.value || null) : null,
         payment_status: docType === 'tax_invoice' ? paymentStatusSelect.value : null,
+        vehicle_no: docType === 'delivery_challan' ? (vehicleInput.value.trim() || null) : null,
+        transporter_name: docType === 'delivery_challan' ? (transporterInput.value.trim() || null) : null,
+        driver_name: docType === 'delivery_challan' ? (driverNameInput.value.trim() || null) : null,
+        driver_contact: docType === 'delivery_challan' ? (driverContactInput.value.trim() || null) : null,
+        place_of_delivery: docType === 'delivery_challan' ? (placeOfDeliveryInput.value.trim() || null) : null,
+        transport_reason: docType === 'delivery_challan' ? (transportReasonInput.value.trim() || null) : null,
+        include_signature: includeSignatureInput.checked,
+        include_stamp: includeStampInput.checked,
+        ship_to_same: shipToSameInput.checked,
+        ship_to_name: shipToNameInput.value.trim() || null,
+        ship_to_address: shipToAddressInput.value.trim() || null,
+        ship_to_city: shipToCityInput.value.trim() || null,
+        ship_to_state: shipToStateSelect.value || null,
+        ship_to_pincode: shipToPincodeInput.value.trim() || null,
+        project_name: projectNameInput ? (projectNameInput.value.trim() || null) : null,
+        enquiry_no: enquiryNoInput ? (enquiryNoInput.value.trim() || null) : null,
+        deliver_to_same: deliverToSameInput.checked,
+        deliver_to_name: deliverToNameInput.value.trim() || null,
+        deliver_to_address: deliverToAddressInput.value.trim() || null,
+        deliver_to_city: deliverToCityInput.value.trim() || null,
+        deliver_to_state: deliverToStateSelect.value || null,
+        deliver_to_pincode: deliverToPincodeInput.value.trim() || null,
+        is_revised: revisedInput ? revisedInput.checked : false,
+        revision_no: revisedInput ? state.revisionNo : 0,
+        price_basis: priceBasisInput ? (priceBasisInput.value.trim() || null) : null,
+        payment_terms: paymentTermsPoInput ? (paymentTermsPoInput.value.trim() || null) : null,
+        packing_terms: packingTermsInput ? (packingTermsInput.value.trim() || null) : null,
+        freight_terms: freightTermsInput ? (freightTermsInput.value.trim() || null) : null,
+        delivery_schedule: deliveryScheduleInput ? (deliveryScheduleInput.value.trim() || null) : null,
+        delivery_type: deliveryTypeInput ? (deliveryTypeInput.value.trim() || null) : null,
+        transportation: transportationInput ? (transportationInput.value.trim() || null) : null,
         items
       };
       let saved;
@@ -288,23 +601,54 @@ async function renderDocumentEditor(root, params) {
   }
 }
 
+// Guards against the "Preview / Print" button being double-clicked (or the
+// auto-preview-after-save and a manual click racing each other) before the
+// first call's awaits (document fetch, settings fetch, CSS fetch) resolve —
+// without this, two overlays could stack, and a Close on the top one would
+// silently reveal a second live preview underneath.
+let previewModalOpen = false;
 async function openPreview(docId) {
-  const doc = await window.api.documents.get(docId);
-  const settings = await window.api.settings.get();
-  const customer = doc.customer_snapshot || null;
-  const cssText = await fetch('css/document-theme.css').then(r => r.text());
+  if (previewModalOpen) return;
+  previewModalOpen = true;
+  let doc, settings, customer, cssText;
+  try {
+    doc = await window.api.documents.get(docId);
+    settings = await window.api.settings.get();
+    customer = doc.customer_snapshot || null;
+    cssText = await fetch('css/document-theme.css').then(r => r.text());
+  } catch (err) {
+    previewModalOpen = false;
+    throw err;
+  }
   const html = buildDocumentHtml(doc, settings, customer, cssText);
 
   const overlay = el('div', { class: 'modal-overlay', style: 'align-items:flex-start;padding:30px 0' });
   const nextStage = { quotation: 'proforma', proforma: 'tax_invoice' }[doc.doc_type];
   const nextStageLabel = { proforma: 'Proforma', tax_invoice: 'Tax Invoice' };
   const toolbar = el('div', { class: 'preview-toolbar' }, [
-    el('button', { class: 'btn secondary', onclick: () => overlay.remove() }, ['Close']),
+    el('button', { class: 'btn secondary', onclick: () => { overlay.remove(); previewModalOpen = false; } }, ['Close']),
     el('button', { class: 'btn secondary', onclick: async () => { const r = await window.api.document.print(html); if (r.success) showToast('Sent to printer'); } }, ['Print']),
     el('button', { class: 'btn', onclick: async () => {
-      const r = await window.api.document.savePdf(html, doc.doc_number);
+      const r = await window.api.document.savePdf(html, pdfFilenameFor(doc));
       if (r.success) showToast('PDF saved: ' + r.filePath);
     } }, ['Save as PDF']),
+    el('button', { class: 'btn secondary', onclick: async () => {
+      const r = await window.api.document.savePdf(html, pdfFilenameFor(doc));
+      if (!r.success) return;
+      const label = DOC_TYPE_LABELS[doc.doc_type] || 'Document';
+      window.api.document.openMailto({
+        to: (customer && customer.email) || '',
+        subject: `${label} ${doc.doc_number} from ${settings.name}`,
+        body: `Hi,\n\nPlease find attached ${label} ${doc.doc_number}.\n\nThank you,\n${settings.name}`
+      });
+      window.api.document.revealInFolder(r.filePath);
+      showToast('PDF saved — attach it in the email that just opened');
+    } }, ['✉ Send Email']),
+    (customer && customer.mobile) ? el('button', { class: 'btn secondary', onclick: () => {
+      const digits = customer.mobile.replace(/\D/g, '');
+      const withCountry = digits.length === 10 ? '91' + digits : digits;
+      window.api.document.openExternal(`https://wa.me/${withCountry}`);
+    } }, ['💬 WhatsApp']) : null,
     nextStage ? el('button', { class: 'btn', onclick: async () => {
       const created = await window.api.documents.duplicateAs(doc.id, nextStage);
       overlay.remove();
@@ -317,6 +661,16 @@ async function openPreview(docId) {
   const box = el('div', { style: 'width:100%;max-width:900px' }, [toolbar, wrap]);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
+  // Documents can run longer than one A4 page (HSN table, amount-in-words,
+  // declaration, etc.) — size the iframe to its actual content height so the
+  // whole thing is visible via the outer wrap's scrollbar, not clipped or
+  // hidden behind a separate inner scrollbar.
+  iframe.addEventListener('load', () => {
+    const doc2 = iframe.contentDocument;
+    if (doc2 && doc2.body) {
+      iframe.style.height = doc2.documentElement.scrollHeight + 'px';
+    }
+  });
   iframe.srcdoc = html;
 }
 
@@ -329,12 +683,29 @@ function buildCustomerOptions(customers, selectedId) {
   ];
 }
 
+function buildSupplierOptions(suppliers, selectedId) {
+  return [
+    el('option', { value: '' }, ['Select a supplier']),
+    ...suppliers.map(s => el('option', {
+      value: s.id, ...(selectedId && String(selectedId) === String(s.id) ? { selected: 'selected' } : {})
+    }, [s.name]))
+  ];
+}
+
 function emptyItem() {
-  return { product_id: null, description: '', hsn_sac: '', qty: 1, rate: 0, gst_percent: 18 };
+  return {
+    product_id: null, description: '', hsn_sac: '', qty: 1, rate: 0, gst_percent: 18,
+    use_structured_specs: false, spec_flow_head: '', spec_model: '', spec_kw_rpm: '', spec_moc: '',
+    use_engine_spec: false, spec_engine: '',
+    use_engine_accessories: false, spec_engine_accessories: ''
+  };
 }
 
 function termsKeyFor(docType) {
-  return docType === 'quotation' ? 'quotation_terms' : docType === 'proforma' ? 'proforma_terms' : 'tax_invoice_terms';
+  if (docType === 'quotation') return 'quotation_terms';
+  if (docType === 'proforma') return 'proforma_terms';
+  if (docType === 'purchase_order') return 'purchase_order_terms';
+  return 'tax_invoice_terms';
 }
 
 function addDays(date, days) {

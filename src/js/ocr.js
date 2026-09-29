@@ -123,7 +123,7 @@ function cropImageInteractive(dataUrl) {
           e.stopPropagation();
         });
       });
-      window.addEventListener('mousemove', (e) => {
+      function onWindowMouseMove(e) {
         if (!drag) return;
         const dx = e.clientX - drag.startX;
         const dy = e.clientY - drag.startY;
@@ -139,13 +139,20 @@ function cropImageInteractive(dataUrl) {
         }
         clampRect();
         applyRectStyle();
-      });
-      window.addEventListener('mouseup', () => { drag = null; });
+      }
+      function onWindowMouseUp() { drag = null; }
+      window.addEventListener('mousemove', onWindowMouseMove);
+      window.addEventListener('mouseup', onWindowMouseUp);
 
       const imgWrap = el('div', { style: `position:relative;width:${dispW}px;height:${dispH}px;` }, [imgEl, rectEl]);
 
       const overlay = el('div', { class: 'modal-overlay' });
-      const cleanup = (result) => { overlay.remove(); resolve(result); };
+      const cleanup = (result) => {
+        window.removeEventListener('mousemove', onWindowMouseMove);
+        window.removeEventListener('mouseup', onWindowMouseUp);
+        overlay.remove();
+        resolve(result);
+      };
 
       const box = el('div', { class: 'modal-box', style: 'width:auto;max-width:90vw;' }, [
         el('h3', {}, ['Select just the card / document']),

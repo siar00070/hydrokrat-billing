@@ -2,18 +2,29 @@ const routes = {
   dashboard: (root) => renderDashboard(root),
   documents: (root) => renderDocumentsList(root),
   customers: (root) => renderCustomers(root),
+  suppliers: (root) => renderSuppliers(root),
   products: (root) => renderProducts(root),
   settings: (root) => renderSettings(root),
   'document-editor': (root, params) => renderDocumentEditor(root, params)
 };
 
+// Every route render function is async and does its `root.appendChild(...)`
+// calls only after one or more `await`s (fetching data via IPC). If the user
+// navigates again before those awaits resolve, the OLD render's later
+// appendChild calls would land in whatever page is now showing — that's what
+// caused Dashboard content to appear stacked above Settings. Fix: give each
+// navigation its own fresh, disposable container. A stale render's leftover
+// appendChild calls land on a container that's already been detached from
+// the page, so they're invisible instead of leaking into the new screen.
 function navigate(route, params) {
   const content = document.getElementById('content');
   document.querySelectorAll('.nav-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.route === route);
   });
   content.innerHTML = '';
-  routes[route](content, params || {});
+  const pageRoot = document.createElement('div');
+  content.appendChild(pageRoot);
+  routes[route](pageRoot, params || {});
 }
 
 function showToast(msg) {

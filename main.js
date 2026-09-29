@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, dialog, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, safeStorage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { createSupabaseContext } = require('./db/supabaseClient');
 const { createRemoteStore } = require('./db/remoteStore');
 const { computeTotals } = require('./db/logic');
@@ -94,6 +95,12 @@ function registerIpc() {
   ipcMain.handle('customers:update', (e, id, c) => store.updateCustomer(id, c));
   ipcMain.handle('customers:delete', (e, id) => store.deleteCustomer(id));
 
+  ipcMain.handle('suppliers:list', (e, search) => store.listSuppliers(search));
+  ipcMain.handle('suppliers:get', (e, id) => store.getSupplier(id));
+  ipcMain.handle('suppliers:create', (e, s) => store.createSupplier(s));
+  ipcMain.handle('suppliers:update', (e, id, s) => store.updateSupplier(id, s));
+  ipcMain.handle('suppliers:delete', (e, id) => store.deleteSupplier(id));
+
   // Products
   ipcMain.handle('products:list', (e, search) => store.listProducts(search));
   ipcMain.handle('products:create', (e, p) => store.createProduct(p));
@@ -119,16 +126,20 @@ function registerIpc() {
     const original = await store.getDocument(id);
     if (!original) throw new Error('Document not found');
     const settings = await store.getSettings();
-    const termsKey = newDocType === 'quotation' ? 'quotation_terms' : newDocType === 'proforma' ? 'proforma_terms' : 'tax_invoice_terms';
+    const termsKeyMap = { quotation: 'quotation_terms', proforma: 'proforma_terms', tax_invoice: 'tax_invoice_terms', purchase_order: 'purchase_order_terms' };
+    const termsKey = termsKeyMap[newDocType];
+    const isPO = newDocType === 'purchase_order';
     const payload = {
       doc_type: newDocType,
       doc_date: new Date().toISOString().slice(0, 10),
-      valid_until: newDocType === 'tax_invoice' ? null : original.valid_until,
-      customer_id: original.customer_id,
-      place_of_supply: original.place_of_supply,
+      valid_until: (newDocType === 'tax_invoice' || newDocType === 'delivery_challan' || isPO) ? null : original.valid_until,
+      customer_id: isPO ? null : original.customer_id,
+      place_of_supply: isPO ? null : original.place_of_supply,
       discount: original.discount,
-      terms: settings[termsKey],
+      terms: termsKey ? settings[termsKey] : '',
       notes: original.notes,
+      project_name: original.project_name || null,
+      enquiry_no: isPO ? (original.enquiry_no || original.doc_number) : (original.enquiry_no || null),
       items: (original.items || []).map(it => ({
         product_id: it.product_id, description: it.description, hsn_sac: it.hsn_sac,
         qty: it.qty, rate: it.rate, gst_percent: it.gst_percent
@@ -147,7 +158,7 @@ function registerIpc() {
     if (canceled || !filePath) return { success: false };
 
     const printWin = new BrowserWindow({ show: false, webPreferences: { offscreen: true } });
-    await printWin.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    await loadHtmlIntoWindow(printWin, html);
     const pdfBuffer = await printWin.webContents.printToPDF({
       printBackground: true,
       pageSize: 'A4',
@@ -160,7 +171,7 @@ function registerIpc() {
 
   ipcMain.handle('document:print', async (e, html) => {
     const printWin = new BrowserWindow({ show: false });
-    await printWin.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    await loadHtmlIntoWindow(printWin, html);
     return new Promise((resolve) => {
       printWin.webContents.print({ printBackground: true }, (success) => {
         printWin.destroy();
@@ -172,6 +183,24 @@ function registerIpc() {
   // ---- This PC's branch name (local only, not synced) ----
   ipcMain.handle('branch:get', () => localConfig.getBranchName());
   ipcMain.handle('branch:set', (e, name) => localConfig.setBranchName(name));
+
+  // ---- Shared "permanent delete" password (protects the one irreversible action) ----
+  ipcMain.handle('security:has_delete_password', async () => {
+    const settings = await store.getSettings();
+    return !!settings.delete_password_hash;
+  });
+  ipcMain.handle('security:set_delete_password', async (e, password) => {
+    const hash = password ? crypto.createHash('sha256').update(password).digest('hex') : null;
+    await store.updateSettings({ delete_password_hash: hash });
+    return true;
+  });
+  ipcMain.handle('security:verify_delete_password', async (e, password) => {
+    const settings = await store.getSettings();
+    if (!settings.delete_password_hash) return true; // no password configured — nothing to gate
+    if (!password) return false;
+    const hash = crypto.createHash('sha256').update(password).digest('hex');
+    return hash === settings.delete_password_hash;
+  });
 
   // ---- Excel export ----
   ipcMain.handle('export:documents_excel', async (e, filters) => {
@@ -200,9 +229,80 @@ function registerIpc() {
       { header: 'Due Date', key: 'due_date', width: 14 }
     ];
     ws.getRow(1).font = { bold: true };
-    rows.forEach(r => ws.addRow(r));
+    rows.forEach(r => ws.addRow({ ...r, customer_name: r.customer_name || r.supplier_name }));
     await wb.xlsx.writeFile(filePath);
     return { success: true, filePath };
+  });
+
+  // GSTR-1 B2B export — matches the GST offline utility's "b2b" sheet columns,
+  // so it can be imported directly into Tally or the GST portal's return filing tool.
+  ipcMain.handle('export:gstr1_excel', async (e, filters) => {
+    filters = filters || {};
+    const list = await store.listDocuments({ docType: 'tax_invoice' });
+    const inRange = list.filter(d =>
+      (!filters.from || d.doc_date >= filters.from) &&
+      (!filters.to || d.doc_date <= filters.to)
+    );
+
+    const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export GSTR-1 (B2B) Report',
+      defaultPath: 'HV-GSTR1-B2B.xlsx',
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+    });
+    if (canceled || !filePath) return { success: false };
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('b2b');
+    ws.columns = [
+      { header: 'GSTIN/UIN of Recipient', key: 'gstin', width: 20 },
+      { header: 'Receiver Name', key: 'receiver', width: 26 },
+      { header: 'Invoice Number', key: 'invoice_no', width: 18 },
+      { header: 'Invoice date', key: 'invoice_date', width: 14 },
+      { header: 'Invoice Value', key: 'invoice_value', width: 14 },
+      { header: 'Place Of Supply', key: 'place_of_supply', width: 20 },
+      { header: 'Reverse Charge', key: 'reverse_charge', width: 14 },
+      { header: 'Applicable % of Tax Rate', key: 'applicable_pct', width: 16 },
+      { header: 'Invoice Type', key: 'invoice_type', width: 14 },
+      { header: 'E-Commerce GSTIN', key: 'ecom_gstin', width: 16 },
+      { header: 'Rate', key: 'rate', width: 10 },
+      { header: 'Taxable Value', key: 'taxable_value', width: 16 },
+      { header: 'Cess Amount', key: 'cess', width: 12 }
+    ];
+    ws.getRow(1).font = { bold: true };
+
+    let skippedNoGstin = 0;
+    for (const summary of inRange) {
+      const doc = await store.getDocument(summary.id);
+      const gstin = doc.customer_snapshot && doc.customer_snapshot.gstin;
+      if (!gstin) { skippedNoGstin++; continue; }
+
+      const byRate = {};
+      (doc.items || []).forEach(it => {
+        const rate = Number(it.gst_percent) || 0;
+        byRate[rate] = (byRate[rate] || 0) + (Number(it.amount) || 0);
+      });
+
+      Object.entries(byRate).forEach(([rate, taxableValue]) => {
+        ws.addRow({
+          gstin,
+          receiver: doc.customer_snapshot.name,
+          invoice_no: doc.doc_number,
+          invoice_date: doc.doc_date,
+          invoice_value: doc.total,
+          place_of_supply: doc.place_of_supply || '',
+          reverse_charge: 'N',
+          applicable_pct: '',
+          invoice_type: 'Regular',
+          ecom_gstin: '',
+          rate: Number(rate),
+          taxable_value: Math.round(taxableValue * 100) / 100,
+          cess: 0
+        });
+      });
+    }
+
+    await wb.xlsx.writeFile(filePath);
+    return { success: true, filePath, skippedNoGstin };
   });
 
   ipcMain.handle('export:customers_excel', async () => {
@@ -223,12 +323,30 @@ function registerIpc() {
       { header: 'State', key: 'state', width: 16 },
       { header: 'Pincode', key: 'pincode', width: 12 },
       { header: 'Mobile', key: 'mobile', width: 16 },
+      { header: 'Email', key: 'email', width: 24 },
       { header: 'GSTIN', key: 'gstin', width: 18 }
     ];
     ws.getRow(1).font = { bold: true };
     rows.forEach(r => ws.addRow(r));
     await wb.xlsx.writeFile(filePath);
     return { success: true, filePath };
+  });
+
+  // ---- Send helpers (quick-helper: no SMTP credentials needed) ----
+  ipcMain.handle('document:reveal_in_folder', (e, filePath) => {
+    shell.showItemInFolder(filePath);
+    return true;
+  });
+  ipcMain.handle('document:open_mailto', (e, { to, subject, body }) => {
+    const params = new URLSearchParams();
+    if (subject) params.set('subject', subject);
+    if (body) params.set('body', body);
+    shell.openExternal(`mailto:${to || ''}?${params.toString()}`);
+    return true;
+  });
+  ipcMain.handle('document:open_external', (e, url) => {
+    shell.openExternal(url);
+    return true;
   });
 }
 
@@ -255,10 +373,24 @@ function setupAutoUpdater() {
   }
 }
 
+// Loading big HTML (embedded logo/watermark/signature images) via a data: URL
+// hits Chromium's max URL length; writing to a temp file has no such limit.
+async function loadHtmlIntoWindow(win, html) {
+  const tempPath = path.join(app.getPath('temp'), `hv-print-${Date.now()}-${Math.random().toString(36).slice(2)}.html`);
+  fs.writeFileSync(tempPath, html, 'utf-8');
+  try {
+    await win.loadFile(tempPath);
+  } finally {
+    fs.unlink(tempPath, () => {});
+  }
+}
+
 async function saveDocument(payload, existingId) {
   const settings = await store.getSettings();
-  const customer = payload.customer_id ? await store.getCustomer(payload.customer_id) : null;
-  const customerState = payload.place_of_supply || (customer ? customer.state : '');
+  const isPurchaseOrder = payload.doc_type === 'purchase_order';
+  const customer = !isPurchaseOrder && payload.customer_id ? await store.getCustomer(payload.customer_id) : null;
+  const supplier = isPurchaseOrder && payload.supplier_id ? await store.getSupplier(payload.supplier_id) : null;
+  const partyState = payload.place_of_supply || (isPurchaseOrder ? (supplier ? supplier.state : '') : (customer ? customer.state : ''));
 
   const items = payload.items.map((it, idx) => ({
     product_id: it.product_id || null,
@@ -268,6 +400,15 @@ async function saveDocument(payload, existingId) {
     rate: Number(it.rate) || 0,
     gst_percent: Number(it.gst_percent) || 0,
     amount: Math.round((Number(it.qty) * Number(it.rate) + Number.EPSILON) * 100) / 100,
+    use_structured_specs: !!it.use_structured_specs,
+    spec_flow_head: it.use_structured_specs ? (it.spec_flow_head || null) : null,
+    spec_model: it.use_structured_specs ? (it.spec_model || null) : null,
+    spec_kw_rpm: it.use_structured_specs ? (it.spec_kw_rpm || null) : null,
+    spec_moc: it.use_structured_specs ? (it.spec_moc || null) : null,
+    use_engine_spec: !!it.use_engine_spec,
+    spec_engine: it.use_engine_spec ? (it.spec_engine || null) : null,
+    use_engine_accessories: !!it.use_engine_accessories,
+    spec_engine_accessories: it.use_engine_accessories ? (it.spec_engine_accessories || null) : null,
     sort_order: idx
   }));
 
@@ -275,16 +416,18 @@ async function saveDocument(payload, existingId) {
     items,
     discount: Number(payload.discount) || 0,
     sellerState: settings.state,
-    customerState
+    customerState: partyState
   });
 
   const record = {
     doc_type: payload.doc_type,
     doc_date: payload.doc_date,
     valid_until: payload.valid_until || null,
-    customer_id: payload.customer_id || null,
-    customer_snapshot: customer || null,
-    place_of_supply: customerState,
+    customer_id: isPurchaseOrder ? null : (payload.customer_id || null),
+    customer_snapshot: isPurchaseOrder ? null : (customer || null),
+    supplier_id: isPurchaseOrder ? (payload.supplier_id || null) : null,
+    supplier_snapshot: isPurchaseOrder ? (supplier || null) : null,
+    place_of_supply: partyState,
     subtotal: totals.subtotal,
     discount: totals.discount,
     cgst: totals.cgst,
@@ -296,6 +439,37 @@ async function saveDocument(payload, existingId) {
     notes: payload.notes || '',
     due_date: payload.due_date || null,
     payment_status: payload.payment_status || null,
+    vehicle_no: payload.vehicle_no || null,
+    transporter_name: payload.transporter_name || null,
+    driver_name: payload.driver_name || null,
+    driver_contact: payload.driver_contact || null,
+    place_of_delivery: payload.place_of_delivery || null,
+    transport_reason: payload.transport_reason || null,
+    include_signature: payload.include_signature !== false,
+    include_stamp: payload.include_stamp !== false,
+    ship_to_same: payload.ship_to_same !== false,
+    ship_to_name: payload.ship_to_same === false ? (payload.ship_to_name || null) : null,
+    ship_to_address: payload.ship_to_same === false ? (payload.ship_to_address || null) : null,
+    ship_to_city: payload.ship_to_same === false ? (payload.ship_to_city || null) : null,
+    ship_to_state: payload.ship_to_same === false ? (payload.ship_to_state || null) : null,
+    ship_to_pincode: payload.ship_to_same === false ? (payload.ship_to_pincode || null) : null,
+    project_name: payload.project_name || null,
+    enquiry_no: payload.enquiry_no || null,
+    deliver_to_same: payload.deliver_to_same !== false,
+    deliver_to_name: payload.deliver_to_same === false ? (payload.deliver_to_name || null) : null,
+    deliver_to_address: payload.deliver_to_same === false ? (payload.deliver_to_address || null) : null,
+    deliver_to_city: payload.deliver_to_same === false ? (payload.deliver_to_city || null) : null,
+    deliver_to_state: payload.deliver_to_same === false ? (payload.deliver_to_state || null) : null,
+    deliver_to_pincode: payload.deliver_to_same === false ? (payload.deliver_to_pincode || null) : null,
+    is_revised: !!payload.is_revised,
+    revision_no: payload.is_revised ? (Number(payload.revision_no) || 1) : 0,
+    price_basis: payload.price_basis || null,
+    payment_terms: payload.payment_terms || null,
+    packing_terms: payload.packing_terms || null,
+    freight_terms: payload.freight_terms || null,
+    delivery_schedule: payload.delivery_schedule || null,
+    delivery_type: payload.delivery_type || null,
+    transportation: payload.transportation || null,
     items
   };
 
