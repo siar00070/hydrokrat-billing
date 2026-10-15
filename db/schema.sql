@@ -252,6 +252,8 @@ alter table document_items add column if not exists use_engine_spec boolean defa
 alter table document_items add column if not exists spec_engine text;
 alter table document_items add column if not exists use_engine_accessories boolean default false;
 alter table document_items add column if not exists spec_engine_accessories text;
+alter table document_items add column if not exists use_accessories boolean default false;
+alter table document_items add column if not exists spec_accessories text;
 
 -- ---------- Migration: Revised Offer toggle (quotation, proforma) ----------
 alter table documents add column if not exists is_revised boolean default false;
@@ -262,6 +264,11 @@ alter table documents add column if not exists price_basis text;
 alter table documents add column if not exists payment_terms text;
 alter table documents add column if not exists packing_terms text;
 alter table documents add column if not exists freight_terms text;
+alter table documents add column if not exists warranty_terms text;
+alter table documents add column if not exists scope_of_supply text;
 alter table documents add column if not exists delivery_schedule text;
 alter table documents add column if not exists delivery_type text;
 alter table documents add column if not exists transportation text;
+
+-- ---------- Migration: Supplier contact person ----------
+alter table suppliers add column if not exists contact_person text;

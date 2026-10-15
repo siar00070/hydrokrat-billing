@@ -149,13 +149,35 @@ function registerIpc() {
   });
 
   // PDF export / print
-  ipcMain.handle('document:save_pdf', async (e, html, suggestedName) => {
-    const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
-      title: 'Save as PDF',
-      defaultPath: `${suggestedName || 'document'}.pdf`,
-      filters: [{ name: 'PDF', extensions: ['pdf'] }]
-    });
-    if (canceled || !filePath) return { success: false };
+  const OUTPUT_FOLDER_BY_TYPE = { quotation: 'QT', proforma: 'PI', tax_invoice: 'TI', delivery_challan: 'DC', purchase_order: 'PO' };
+
+  // Completed documents go straight into D:\Hydrokrat Billing outputs\<QT|PI|TI|DC|PO>.
+  // A PC without a D: drive falls back to Documents so saving never fails outright.
+  function outputFolderFor(docType) {
+    const sub = OUTPUT_FOLDER_BY_TYPE[docType];
+    if (!sub) return null;
+    const preferred = 'D:\\Hydrokrat Billing outputs';
+    const base = fs.existsSync('D:\\') ? preferred : path.join(app.getPath('documents'), 'Hydrokrat Billing outputs');
+    const dir = path.join(base, sub);
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  ipcMain.handle('document:save_pdf', async (e, html, suggestedName, docType) => {
+    const safeName = String(suggestedName || 'document').replace(/[\\/:*?"<>|]/g, '').trim() || 'document';
+    const dir = outputFolderFor(docType);
+    let filePath;
+    if (dir) {
+      filePath = path.join(dir, `${safeName}.pdf`);
+    } else {
+      const picked = await dialog.showSaveDialog(mainWindow, {
+        title: 'Save as PDF',
+        defaultPath: `${safeName}.pdf`,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+      });
+      if (picked.canceled || !picked.filePath) return { success: false };
+      filePath = picked.filePath;
+    }
 
     const printWin = new BrowserWindow({ show: false, webPreferences: { offscreen: true } });
     await loadHtmlIntoWindow(printWin, html);
@@ -409,6 +431,8 @@ async function saveDocument(payload, existingId) {
     spec_engine: it.use_engine_spec ? (it.spec_engine || null) : null,
     use_engine_accessories: !!it.use_engine_accessories,
     spec_engine_accessories: it.use_engine_accessories ? (it.spec_engine_accessories || null) : null,
+    use_accessories: !!it.use_accessories,
+    spec_accessories: it.use_accessories ? (it.spec_accessories || null) : null,
     sort_order: idx
   }));
 
@@ -467,6 +491,8 @@ async function saveDocument(payload, existingId) {
     payment_terms: payload.payment_terms || null,
     packing_terms: payload.packing_terms || null,
     freight_terms: payload.freight_terms || null,
+    warranty_terms: payload.warranty_terms || null,
+    scope_of_supply: payload.scope_of_supply || null,
     delivery_schedule: payload.delivery_schedule || null,
     delivery_type: payload.delivery_type || null,
     transportation: payload.transportation || null,

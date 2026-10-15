@@ -1,4 +1,5 @@
 const DOC_TYPE_LABELS = { quotation: 'Quotation', proforma: 'Proforma Invoice', tax_invoice: 'Tax Invoice', delivery_challan: 'Delivery Challan', purchase_order: 'Purchase Order' };
+const HSN_PRESETS = ['84137010', '84137099'];
 
 async function renderDocumentEditor(root, params) {
   const settings = await window.api.settings.get();
@@ -245,7 +246,7 @@ async function renderDocumentEditor(root, params) {
   deliverToSameInput.addEventListener('change', () => {
     deliverToFields.style.display = deliverToSameInput.checked ? 'none' : 'block';
   });
-  let priceBasisInput, paymentTermsPoInput, packingTermsInput, freightTermsInput, deliveryScheduleInput, deliveryTypeInput, transportationInput;
+  let priceBasisInput, paymentTermsPoInput, packingTermsInput, freightTermsInput, deliveryScheduleInput, deliveryTypeInput, transportationInput, warrantyInput, scopeOfSupplyInput;
   if (isPO) {
     card.appendChild(el('div', { style: 'margin-top:14px' }, [
       el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:12.5px;color:#374151;cursor:pointer;margin-bottom:8px' }, [
@@ -261,6 +262,8 @@ async function renderDocumentEditor(root, params) {
     deliveryScheduleInput = el('input', { value: doc ? doc.delivery_schedule || '' : '', placeholder: 'e.g. 14-16 Working Weeks' });
     deliveryTypeInput = el('input', { value: doc ? doc.delivery_type || '' : '', placeholder: 'e.g. Godown Delivery' });
     transportationInput = el('input', { value: doc ? doc.transportation || '' : '', placeholder: 'e.g. By Road' });
+    warrantyInput = el('input', { value: doc ? doc.warranty_terms || '' : '', placeholder: 'e.g. 12 months from commissioning or 18 months from dispatch' });
+    scopeOfSupplyInput = el('textarea', { rows: 2, placeholder: 'e.g. Pump with M seal + KSB Motor + Coupling + Coupling Guard + Baseframe' }, [doc ? doc.scope_of_supply || '' : '']);
 
     card.appendChild(el('div', { style: 'margin-top:14px' }, [
       el('h3', { style: 'font-size:13px;color:#0e3a5f;margin:0 0 10px' }, ['Commercial Terms']),
@@ -276,7 +279,9 @@ async function renderDocumentEditor(root, params) {
         el('div', { class: 'field' }, [el('label', {}, ['Delivery Schedule']), deliveryScheduleInput]),
         el('div', { class: 'field' }, [el('label', {}, ['Delivery Type']), deliveryTypeInput]),
         el('div', { class: 'field' }, [el('label', {}, ['Transportation']), transportationInput])
-      ])
+      ]),
+      el('div', { class: 'field' }, [el('label', {}, ['Scope of Supply']), scopeOfSupplyInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Warranty']), warrantyInput])
     ]));
   }
 
@@ -379,8 +384,35 @@ async function renderDocumentEditor(root, params) {
         style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
       }, [engineAccessoriesToggle, 'Use engine accessories field']);
 
-      const hsnInput = el('input', { value: item.hsn_sac || '' });
-      hsnInput.addEventListener('input', () => { item.hsn_sac = hsnInput.value; });
+      const useAccessories = !!item.use_accessories;
+      const accessoriesToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+      accessoriesToggle.checked = useAccessories;
+      accessoriesToggle.addEventListener('change', () => { item.use_accessories = accessoriesToggle.checked; renderItems(); });
+      const accessoriesToggleLabel = el('label', {
+        style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
+      }, [accessoriesToggle, 'Use accessories field (booster pumps)']);
+
+      const hsnIsCustom = !!item.hsn_sac && !HSN_PRESETS.includes(item.hsn_sac);
+      const hsnSelect = el('select', {}, [
+        el('option', { value: '' }, ['Select HSN...']),
+        ...HSN_PRESETS.map(code => el('option', {
+          value: code, ...(item.hsn_sac === code ? { selected: 'selected' } : {})
+        }, [code])),
+        el('option', { value: '__custom__', ...(hsnIsCustom ? { selected: 'selected' } : {}) }, ['Custom...'])
+      ]);
+      const hsnCustomInput = el('input', { value: hsnIsCustom ? item.hsn_sac : '', placeholder: 'HSN/SAC code' });
+      hsnCustomInput.style.display = hsnIsCustom ? 'block' : 'none';
+      hsnSelect.addEventListener('change', () => {
+        if (hsnSelect.value === '__custom__') {
+          hsnCustomInput.style.display = 'block';
+          hsnCustomInput.focus();
+          item.hsn_sac = hsnCustomInput.value;
+        } else {
+          hsnCustomInput.style.display = 'none';
+          item.hsn_sac = hsnSelect.value;
+        }
+      });
+      hsnCustomInput.addEventListener('input', () => { item.hsn_sac = hsnCustomInput.value; });
 
       const qtyInput = el('input', { type: 'number', step: '1', value: item.qty || 1 });
       qtyInput.addEventListener('input', () => { item.qty = parseFloat(qtyInput.value) || 0; updateTotals(); });
@@ -394,8 +426,8 @@ async function renderDocumentEditor(root, params) {
       const amount = (item.qty || 0) * (item.rate || 0);
 
       itemsBody.appendChild(el('tr', {}, [
-        el('td', {}, [productSelect, descInput, specsToggleLabel, engineSpecToggleLabel, engineAccessoriesToggleLabel]),
-        el('td', {}, [hsnInput]),
+        el('td', {}, [productSelect, descInput, specsToggleLabel, engineSpecToggleLabel, engineAccessoriesToggleLabel, accessoriesToggleLabel]),
+        el('td', {}, [hsnSelect, hsnCustomInput]),
         el('td', {}, [qtyInput]),
         el('td', {}, [rateInput]),
         el('td', {}, [gstInput]),
@@ -434,6 +466,11 @@ async function renderDocumentEditor(root, params) {
         const engineAccInput = el('input', { value: item.spec_engine_accessories || '', placeholder: 'e.g. 12V Battery, 300L Fuel Tank, Battery Charger, Residential silencer and cable' });
         engineAccInput.addEventListener('input', () => { item.spec_engine_accessories = engineAccInput.value; });
         specFields.push(el('div', { class: 'field' }, [el('label', {}, ['Engine Accessories']), engineAccInput]));
+      }
+      if (useAccessories) {
+        const accessoriesInput = el('input', { value: item.spec_accessories || '', placeholder: 'e.g. Pressure tank, pressure switch, non-return valve, control panel' });
+        accessoriesInput.addEventListener('input', () => { item.spec_accessories = accessoriesInput.value; });
+        specFields.push(el('div', { class: 'field' }, [el('label', {}, ['Accessories']), accessoriesInput]));
       }
 
       if (specFields.length > 0) {
@@ -578,6 +615,8 @@ async function renderDocumentEditor(root, params) {
         payment_terms: paymentTermsPoInput ? (paymentTermsPoInput.value.trim() || null) : null,
         packing_terms: packingTermsInput ? (packingTermsInput.value.trim() || null) : null,
         freight_terms: freightTermsInput ? (freightTermsInput.value.trim() || null) : null,
+        warranty_terms: warrantyInput ? (warrantyInput.value.trim() || null) : null,
+        scope_of_supply: scopeOfSupplyInput ? (scopeOfSupplyInput.value.trim() || null) : null,
         delivery_schedule: deliveryScheduleInput ? (deliveryScheduleInput.value.trim() || null) : null,
         delivery_type: deliveryTypeInput ? (deliveryTypeInput.value.trim() || null) : null,
         transportation: transportationInput ? (transportationInput.value.trim() || null) : null,
@@ -629,11 +668,11 @@ async function openPreview(docId) {
     el('button', { class: 'btn secondary', onclick: () => { overlay.remove(); previewModalOpen = false; } }, ['Close']),
     el('button', { class: 'btn secondary', onclick: async () => { const r = await window.api.document.print(html); if (r.success) showToast('Sent to printer'); } }, ['Print']),
     el('button', { class: 'btn', onclick: async () => {
-      const r = await window.api.document.savePdf(html, pdfFilenameFor(doc));
+      const r = await window.api.document.savePdf(html, pdfFilenameFor(doc), doc.doc_type);
       if (r.success) showToast('PDF saved: ' + r.filePath);
     } }, ['Save as PDF']),
     el('button', { class: 'btn secondary', onclick: async () => {
-      const r = await window.api.document.savePdf(html, pdfFilenameFor(doc));
+      const r = await window.api.document.savePdf(html, pdfFilenameFor(doc), doc.doc_type);
       if (!r.success) return;
       const label = DOC_TYPE_LABELS[doc.doc_type] || 'Document';
       window.api.document.openMailto({
@@ -697,7 +736,8 @@ function emptyItem() {
     product_id: null, description: '', hsn_sac: '', qty: 1, rate: 0, gst_percent: 18,
     use_structured_specs: false, spec_flow_head: '', spec_model: '', spec_kw_rpm: '', spec_moc: '',
     use_engine_spec: false, spec_engine: '',
-    use_engine_accessories: false, spec_engine_accessories: ''
+    use_engine_accessories: false, spec_engine_accessories: '',
+    use_accessories: false, spec_accessories: ''
   };
 }
 

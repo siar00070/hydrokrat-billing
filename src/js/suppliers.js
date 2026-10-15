@@ -19,7 +19,7 @@ async function renderSuppliers(root, params) {
     }
     const table = el('table', { class: 'data-table' }, [
       el('thead', {}, [el('tr', {}, [
-        el('th', {}, ['Name']), el('th', {}, ['City / State']), el('th', {}, ['Mobile']),
+        el('th', {}, ['Name']), el('th', {}, ['Contact Person']), el('th', {}, ['City / State']), el('th', {}, ['Mobile']),
         el('th', {}, ['GSTIN']), el('th', {}, [''])
       ])])
     ]);
@@ -27,6 +27,7 @@ async function renderSuppliers(root, params) {
     list.forEach(s => {
       tbody.appendChild(el('tr', {}, [
         el('td', {}, [s.name]),
+        el('td', {}, [s.contact_person || '-']),
         el('td', {}, [[s.city, s.state].filter(Boolean).join(', ')]),
         el('td', {}, [s.mobile || '-']),
         el('td', {}, [s.gstin || '-']),
@@ -65,6 +66,7 @@ function openSupplierModal(supplier, onSaved) {
   const mobileInput = el('input', { value: supplier ? supplier.mobile || '' : '' });
   const gstinInput = el('input', { value: supplier ? supplier.gstin || '' : '' });
   const emailInput = el('input', { type: 'email', value: supplier ? supplier.email || '' : '' });
+  const contactPersonInput = el('input', { value: supplier ? supplier.contact_person || '' : '' });
 
   const scanBtn = el('button', {
     class: 'btn secondary small', style: 'margin-bottom:14px',
@@ -96,6 +98,7 @@ function openSupplierModal(supplier, onSaved) {
     el('h3', {}, [isEdit ? 'Edit Supplier' : 'Add Supplier']),
     scanBtn,
     el('div', { class: 'field' }, [el('label', {}, ['Name']), nameInput]),
+    el('div', { class: 'field' }, [el('label', {}, ['Contact Person']), contactPersonInput]),
     el('div', { class: 'field' }, [el('label', {}, ['Address']), addressInput]),
     el('div', { class: 'field-row' }, [
       el('div', { class: 'field' }, [el('label', {}, ['City']), cityInput]),
@@ -115,7 +118,8 @@ function openSupplierModal(supplier, onSaved) {
           name: nameInput.value.trim(), address: addressInput.value.trim(),
           city: cityInput.value.trim(), state: stateSelect.value,
           pincode: pincodeInput.value.trim(), mobile: mobileInput.value.trim(),
-          gstin: gstinInput.value.trim(), email: emailInput.value.trim()
+          gstin: gstinInput.value.trim(), email: emailInput.value.trim(),
+          contact_person: contactPersonInput.value.trim()
         };
         if (!payload.name) { showToast('Name is required'); return; }
         if (isEdit) await window.api.suppliers.update(supplier.id, payload);

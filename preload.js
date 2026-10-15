@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld('api', {
     monthlySummary: () => ipcRenderer.invoke('documents:monthly_summary')
   },
   document: {
-    savePdf: (html, suggestedName) => ipcRenderer.invoke('document:save_pdf', html, suggestedName),
+    savePdf: (html, suggestedName, docType) => ipcRenderer.invoke('document:save_pdf', html, suggestedName, docType),
     print: (html) => ipcRenderer.invoke('document:print', html),
     revealInFolder: (filePath) => ipcRenderer.invoke('document:reveal_in_folder', filePath),
     openMailto: (opts) => ipcRenderer.invoke('document:open_mailto', opts),

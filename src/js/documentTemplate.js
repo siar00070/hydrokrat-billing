@@ -56,7 +56,8 @@ function buildItemDescHtml(it) {
 
   const engineFields = [
     it.use_engine_spec ? ['Engine Spec', it.spec_engine] : null,
-    it.use_engine_accessories ? ['Engine Accessories', it.spec_engine_accessories] : null
+    it.use_engine_accessories ? ['Engine Accessories', it.spec_engine_accessories] : null,
+    it.use_accessories ? ['Accessories', it.spec_accessories] : null
   ].filter(pair => pair && pair[1]);
   const engineHtml = engineFields.map(([label, v]) => `<div class="item-detail"><strong>${esc(label)}:</strong> ${esc(v)}</div>`).join('');
 
@@ -337,12 +338,12 @@ function buildPurchaseOrderHtml(doc, settings, cssText) {
 
   const commercialTermRows = [
     ['Price Basis', doc.price_basis], ['Terms of Payment', doc.payment_terms],
-    ['Packing', doc.packing_terms], ['Freight', doc.freight_terms],
+    ['Packing', doc.packing_terms], ['Freight', doc.freight_terms], ['Scope of Supply', doc.scope_of_supply], ['Warranty', doc.warranty_terms],
     ['Delivery Schedule', doc.delivery_schedule]
   ].filter(([, v]) => v);
   const commercialTermsHtml = commercialTermRows.length > 0 ? `
   <table class="po-commercial-table">
-    ${commercialTermRows.map(([label, v]) => `<tr><td class="label">${esc(label)}</td><td>${esc(v)}</td></tr>`).join('')}
+    ${commercialTermRows.map(([label, v]) => `<tr><td class="label">${esc(label)}</td><td>${esc(v).split('\n').join('<br>')}</td></tr>`).join('')}
   </table>` : '';
 
   return `<!DOCTYPE html>
@@ -358,13 +359,6 @@ function buildPurchaseOrderHtml(doc, settings, cssText) {
   <div class="doc-header">
     <div>
       ${typeof HV_LOGO_DATA_URI !== 'undefined' ? `<img src="${HV_LOGO_DATA_URI}" class="seller-logo" alt="${esc(settings.name)}">` : ''}
-      <p class="seller-name">${esc(settings.name)}</p>
-      <div class="seller-details">
-        ${esc(settings.address_line1)}<br>
-        ${esc(settings.city_state_pincode)}<br>
-        ${esc(settings.phone1)}${settings.phone2 ? ', ' + esc(settings.phone2) : ''}<br>
-        GSTIN: ${esc(settings.gstin)}
-      </div>
     </div>
     <div class="doc-title-box">
       <div class="doc-title">PURCHASE ORDER</div>
@@ -379,6 +373,7 @@ function buildPurchaseOrderHtml(doc, settings, cssText) {
       <div class="po-party-details">
         ${esc(supplier ? supplier.address : '')}<br>
         ${esc(supplier ? [supplier.city, supplier.pincode].filter(Boolean).join(' - ') : '')}${supplier && supplier.state ? ', ' + esc(stateWithCode(supplier.state)) : ''}<br>
+        ${supplier && supplier.contact_person ? 'Contact Person: ' + esc(supplier.contact_person) + '<br>' : ''}
         ${supplier && supplier.mobile ? 'Mobile No: ' + esc(supplier.mobile) + '<br>' : ''}
         ${supplier && supplier.gstin ? 'GSTIN: ' + esc(supplier.gstin) : ''}
       </div>
@@ -393,6 +388,7 @@ function buildPurchaseOrderHtml(doc, settings, cssText) {
       <div class="po-party-details">
         ${esc(settings.address_line1)}<br>
         ${esc(settings.city_state_pincode)}<br>
+        ${settings.phone1 ? 'Mobile No: ' + esc(settings.phone1) + (settings.phone2 ? ', ' + esc(settings.phone2) : '') + '<br>' : ''}
         GSTIN: ${esc(settings.gstin)}
       </div>
       <div class="po-party-meta">
@@ -489,7 +485,7 @@ async function downloadDocumentPdf(docId) {
   const customer = doc.customer_snapshot || null;
   const cssText = await fetch('css/document-theme.css').then(r => r.text());
   const html = buildDocumentHtml(doc, settings, customer, cssText);
-  return window.api.document.savePdf(html, pdfFilenameFor(doc));
+  return window.api.document.savePdf(html, pdfFilenameFor(doc), doc.doc_type);
 }
 
 if (typeof module !== 'undefined') module.exports = { buildDocumentHtml, DOC_LABEL, fmtMoney, fmtDate, pdfFilenameFor };

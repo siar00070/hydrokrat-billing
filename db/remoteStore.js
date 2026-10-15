@@ -305,7 +305,7 @@ function normalizeSupplier(s) {
   return {
     name: s.name || '', address: s.address || '', city: s.city || '',
     state: s.state || '', pincode: s.pincode || '', mobile: s.mobile || '',
-    email: s.email || '', gstin: s.gstin || ''
+    email: s.email || '', gstin: s.gstin || '', contact_person: s.contact_person || ''
   };
 }
 
