@@ -255,6 +255,17 @@ alter table document_items add column if not exists spec_engine_accessories text
 alter table document_items add column if not exists use_accessories boolean default false;
 alter table document_items add column if not exists spec_accessories text;
 
+-- Internal rate calculator per item (never printed): LP, discount %, freight, margin %
+alter table document_items add column if not exists use_pricing_calc boolean default false;
+alter table document_items add column if not exists item_lp numeric;
+alter table document_items add column if not exists item_discount_pct numeric;
+alter table document_items add column if not exists item_freight numeric;
+alter table document_items add column if not exists item_margin_pct numeric;
+alter table document_items add column if not exists item_acc_lp numeric;
+alter table document_items add column if not exists item_acc_discount_pct numeric;
+alter table document_items add column if not exists item_eng_acc_lp numeric;
+alter table document_items add column if not exists item_eng_acc_discount_pct numeric;
+
 -- ---------- Migration: Revised Offer toggle (quotation, proforma) ----------
 alter table documents add column if not exists is_revised boolean default false;
 alter table documents add column if not exists revision_no int default 0;
@@ -272,3 +283,9 @@ alter table documents add column if not exists transportation text;
 
 -- ---------- Migration: Supplier contact person ----------
 alter table suppliers add column if not exists contact_person text;
+
+-- Separate toggle for the accessories price calculator
+alter table document_items add column if not exists use_acc_pricing_calc boolean default false;
+
+-- Ready sale price add-on (added to the calculated rate as is)
+alter table document_items add column if not exists item_fixed_price numeric;

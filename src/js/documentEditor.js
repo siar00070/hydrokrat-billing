@@ -322,6 +322,33 @@ async function renderDocumentEditor(root, params) {
     class: 'btn secondary small', onclick: () => { state.items.push(emptyItem()); renderItems(); }
   }, ['+ Add Item']));
 
+  // Moves accessories / engine accessories out of an item into their own rows, each with its own
+  // rate (discounted price + freight % + margin %). Row rates add up to the same total as before.
+  function splitAccessoriesLines(idx) {
+    const parent = state.items[idx];
+    const title = (parent.description || '').split('\n')[0].trim();
+    const parts = [
+      { on: parent.use_accessories, name: 'Accessories', spec: parent.spec_accessories, lp: parent.item_acc_lp, d: parent.item_acc_discount_pct },
+      { on: parent.use_engine_accessories, name: 'Engine Accessories', spec: parent.spec_engine_accessories, lp: parent.item_eng_acc_lp, d: parent.item_eng_acc_discount_pct }
+    ].filter(p => p.on);
+    const added = parts.map(p => {
+      const row = emptyItem();
+      row.description = [`${p.name}${title ? ' for ' + title : ''}`, ...String(p.spec || '').split('\n').map(s => s.trim()).filter(Boolean)].join('\n');
+      row.hsn_sac = parent.hsn_sac; row.qty = parent.qty; row.gst_percent = parent.gst_percent;
+      row.use_pricing_calc = true;
+      row.item_lp = p.lp; row.item_discount_pct = p.d;
+      row.item_freight = parent.item_freight; row.item_margin_pct = parent.item_margin_pct;
+      if (p.name === 'Accessories') { row.item_fixed_price = parent.item_fixed_price; }
+      row.rate = computeItemPricing(row).rate;
+      return row;
+    });
+    parent.use_accessories = false; parent.use_engine_accessories = false; parent.use_acc_pricing_calc = false;
+    if (parts.some(p => p.name === 'Accessories')) parent.item_fixed_price = null;
+    if (parent.use_pricing_calc) parent.rate = computeItemPricing(parent).rate;
+    state.items.splice(idx + 1, 0, ...added);
+    renderItems();
+  }
+
   function renderItems() {
     itemsBody.innerHTML = '';
     state.items.forEach((item, idx) => {
@@ -379,7 +406,7 @@ async function renderDocumentEditor(root, params) {
       const useEngineAccessories = !!item.use_engine_accessories;
       const engineAccessoriesToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
       engineAccessoriesToggle.checked = useEngineAccessories;
-      engineAccessoriesToggle.addEventListener('change', () => { item.use_engine_accessories = engineAccessoriesToggle.checked; renderItems(); });
+      engineAccessoriesToggle.addEventListener('change', () => { item.use_engine_accessories = engineAccessoriesToggle.checked; if (item.use_pricing_calc || item.use_acc_pricing_calc) item.rate = computeItemPricing(item).rate; renderItems(); });
       const engineAccessoriesToggleLabel = el('label', {
         style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
       }, [engineAccessoriesToggle, 'Use engine accessories field']);
@@ -387,10 +414,27 @@ async function renderDocumentEditor(root, params) {
       const useAccessories = !!item.use_accessories;
       const accessoriesToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
       accessoriesToggle.checked = useAccessories;
-      accessoriesToggle.addEventListener('change', () => { item.use_accessories = accessoriesToggle.checked; renderItems(); });
+      accessoriesToggle.addEventListener('change', () => { item.use_accessories = accessoriesToggle.checked; if (item.use_pricing_calc || item.use_acc_pricing_calc) item.rate = computeItemPricing(item).rate; renderItems(); });
       const accessoriesToggleLabel = el('label', {
         style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
       }, [accessoriesToggle, 'Use accessories field (booster pumps)']);
+
+      const pricingAllowed = ['quotation', 'proforma', 'tax_invoice'].includes(docType);
+      const usePricing = pricingAllowed && !!item.use_pricing_calc;
+      const pricingToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+      pricingToggle.checked = usePricing;
+      pricingToggle.addEventListener('change', () => { item.use_pricing_calc = pricingToggle.checked; renderItems(); });
+      const pricingToggleLabel = pricingAllowed ? el('label', {
+        style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
+      }, [pricingToggle, 'Calculate pump rate from list price (internal)']) : null;
+
+      const useAccPricing = pricingAllowed && !!item.use_acc_pricing_calc && (useAccessories || useEngineAccessories);
+      const accPricingToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+      accPricingToggle.checked = useAccPricing;
+      accPricingToggle.addEventListener('change', () => { item.use_acc_pricing_calc = accPricingToggle.checked; renderItems(); });
+      const accPricingToggleLabel = (pricingAllowed && (useAccessories || useEngineAccessories)) ? el('label', {
+        style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
+      }, [accPricingToggle, 'Calculate accessories price from list price (internal)']) : null;
 
       const hsnIsCustom = !!item.hsn_sac && !HSN_PRESETS.includes(item.hsn_sac);
       const hsnSelect = el('select', {}, [
@@ -426,7 +470,7 @@ async function renderDocumentEditor(root, params) {
       const amount = (item.qty || 0) * (item.rate || 0);
 
       itemsBody.appendChild(el('tr', {}, [
-        el('td', {}, [productSelect, descInput, specsToggleLabel, engineSpecToggleLabel, engineAccessoriesToggleLabel, accessoriesToggleLabel]),
+        el('td', {}, [productSelect, descInput, specsToggleLabel, engineSpecToggleLabel, engineAccessoriesToggleLabel, accessoriesToggleLabel, pricingToggleLabel, accPricingToggleLabel].filter(Boolean)),
         el('td', {}, [hsnSelect, hsnCustomInput]),
         el('td', {}, [qtyInput]),
         el('td', {}, [rateInput]),
@@ -471,6 +515,66 @@ async function renderDocumentEditor(root, params) {
         const accessoriesInput = el('input', { value: item.spec_accessories || '', placeholder: 'e.g. Pressure tank, pressure switch, non-return valve, control panel' });
         accessoriesInput.addEventListener('input', () => { item.spec_accessories = accessoriesInput.value; });
         specFields.push(el('div', { class: 'field' }, [el('label', {}, ['Accessories']), accessoriesInput]));
+      }
+      if (usePricing || useAccPricing) {
+        // Internal only: none of these four values are printed on the document, only the resulting Rate.
+        const calcNote = el('div', { style: 'flex-basis:100%;font-size:11px;color:#0e3a5f;font-weight:600' });
+        const describeCalc = (c) => {
+          const parts = [];
+          if (usePricing) parts.push(`Pump ${fmtMoney(c.pump)}`);
+          if (useAccPricing && item.use_accessories) parts.push(`Accessories ${fmtMoney(c.acc)}`);
+          if (useAccPricing && item.use_engine_accessories) parts.push(`Engine accessories ${fmtMoney(c.engAcc)}`);
+          parts.push(`Freight ${fmtMoney(c.freight)}`, `Margin ${fmtMoney(c.margin)}`);
+          if (c.fixed) parts.push(`Ready price ${fmtMoney(c.fixed)}`);
+          return `${parts.join(' + ')} = Rate ${fmtMoney(c.rate)}`;
+        };
+        const refreshCalc = () => {
+          const c = computeItemPricing(item);
+          calcNote.textContent = describeCalc(c);
+          item.rate = c.rate;
+          rateInput.value = c.rate;
+          updateTotals();
+        };
+        const pricingField = (label, key, placeholder) => {
+          const input = el('input', { type: 'number', step: '0.01', value: item[key] ?? '', placeholder });
+          input.addEventListener('input', () => { item[key] = input.value === '' ? null : parseFloat(input.value); refreshCalc(); });
+          return el('div', { class: 'field' }, [el('label', {}, [label]), input]);
+        };
+        if (usePricing) {
+          specFields.push(
+            pricingField('List Price (LP)', 'item_lp', 'e.g. 100000'),
+            pricingField('Discount %', 'item_discount_pct', 'e.g. 30')
+          );
+        }
+        if (useAccPricing && item.use_accessories) {
+          specFields.push(
+            pricingField('Accessories LP', 'item_acc_lp', 'e.g. 10000'),
+            pricingField('Accessories Discount %', 'item_acc_discount_pct', 'e.g. 20')
+          );
+        }
+        if (useAccPricing && item.use_engine_accessories) {
+          specFields.push(
+            pricingField('Engine Accessories LP', 'item_eng_acc_lp', 'e.g. 25000'),
+            pricingField('Engine Accessories Discount %', 'item_eng_acc_discount_pct', 'e.g. 20')
+          );
+        }
+        specFields.push(
+          pricingField('Freight %', 'item_freight', 'e.g. 3'),
+          pricingField('Margin %', 'item_margin_pct', 'e.g. 15'),
+          pricingField('Ready sale price (added as is)', 'item_fixed_price', 'e.g. 52000 pressure tank'),
+          calcNote
+        );
+        if (useAccPricing) {
+          specFields.push(el('button', {
+            class: 'btn secondary small', style: 'flex-basis:100%',
+            title: 'Moves the accessories into their own line(s) with their own rate; the total stays the same.',
+            onclick: () => splitAccessoriesLines(idx)
+          }, ['Split accessories into separate line(s)']));
+        }
+        // Show the breakdown for values already saved, without overwriting a hand-edited rate on open.
+        calcNote.textContent = (item.item_lp || item.item_acc_lp || item.item_eng_acc_lp)
+          ? `${describeCalc(computeItemPricing(item))} — edit any field to recalculate the Rate`
+          : 'Enter List Price to calculate the Rate';
       }
 
       if (specFields.length > 0) {
@@ -737,8 +841,26 @@ function emptyItem() {
     use_structured_specs: false, spec_flow_head: '', spec_model: '', spec_kw_rpm: '', spec_moc: '',
     use_engine_spec: false, spec_engine: '',
     use_engine_accessories: false, spec_engine_accessories: '',
-    use_accessories: false, spec_accessories: ''
+    use_accessories: false, spec_accessories: '',
+    use_pricing_calc: false, use_acc_pricing_calc: false, item_lp: null, item_discount_pct: null, item_freight: null, item_margin_pct: null,
+    item_acc_lp: null, item_acc_discount_pct: null, item_eng_acc_lp: null, item_eng_acc_discount_pct: null,
+    item_fixed_price: null
   };
+}
+
+// Internal rate calculator: discounted pump + discounted accessories (if enabled) -> freight % -> margin %.
+function computeItemPricing(item) {
+  const num = (v) => parseFloat(v) || 0;
+  const disc = (lp, d) => round2(num(lp) * (1 - num(d) / 100));
+  const pump = item.use_pricing_calc ? disc(item.item_lp, item.item_discount_pct) : 0;
+  const acc = item.use_acc_pricing_calc && item.use_accessories ? disc(item.item_acc_lp, item.item_acc_discount_pct) : 0;
+  const engAcc = item.use_acc_pricing_calc && item.use_engine_accessories ? disc(item.item_eng_acc_lp, item.item_eng_acc_discount_pct) : 0;
+  const base = round2(pump + acc + engAcc);
+  const freight = round2(base * num(item.item_freight) / 100);
+  const margin = round2((base + freight) * num(item.item_margin_pct) / 100);
+  const fixed = round2(num(item.item_fixed_price));
+  const rate = round2(base + freight + margin + fixed);
+  return { pump, acc, engAcc, base, freight, margin, fixed, rate };
 }
 
 function termsKeyFor(docType) {

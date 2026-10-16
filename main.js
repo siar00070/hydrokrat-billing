@@ -433,6 +433,17 @@ async function saveDocument(payload, existingId) {
     spec_engine_accessories: it.use_engine_accessories ? (it.spec_engine_accessories || null) : null,
     use_accessories: !!it.use_accessories,
     spec_accessories: it.use_accessories ? (it.spec_accessories || null) : null,
+    use_pricing_calc: !!it.use_pricing_calc,
+    use_acc_pricing_calc: !!it.use_acc_pricing_calc,
+    item_lp: it.use_pricing_calc ? (it.item_lp ?? null) : null,
+    item_discount_pct: it.use_pricing_calc ? (it.item_discount_pct ?? null) : null,
+    item_freight: (it.use_pricing_calc || it.use_acc_pricing_calc) ? (it.item_freight ?? null) : null,
+    item_margin_pct: (it.use_pricing_calc || it.use_acc_pricing_calc) ? (it.item_margin_pct ?? null) : null,
+    item_fixed_price: (it.use_pricing_calc || it.use_acc_pricing_calc) ? (it.item_fixed_price ?? null) : null,
+    item_acc_lp: it.use_acc_pricing_calc ? (it.item_acc_lp ?? null) : null,
+    item_acc_discount_pct: it.use_acc_pricing_calc ? (it.item_acc_discount_pct ?? null) : null,
+    item_eng_acc_lp: it.use_acc_pricing_calc ? (it.item_eng_acc_lp ?? null) : null,
+    item_eng_acc_discount_pct: it.use_acc_pricing_calc ? (it.item_eng_acc_discount_pct ?? null) : null,
     sort_order: idx
   }));
 
