@@ -516,5 +516,42 @@ async function saveDocument(payload, existingId) {
     record.branch_name = localConfig.getBranchName() || null;
   }
 
-  return store.saveDocument(record, existingId);
+  const saved = await store.saveDocument(record, existingId);
+  await addNewItemsToProducts(items);
+  return saved;
+}
+
+// Items typed in by hand are remembered in Products (description + specs/model only, no pricing)
+// so they can be picked next time and fill the spec fields. Existing products (same description and
+// specs) are left untouched; failures never block the save.
+async function addNewItemsToProducts(items) {
+  try {
+    const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const keyOf = (o) => norm([o.description, o.spec_flow_head, o.spec_model, o.spec_kw_rpm, o.spec_moc,
+      o.spec_engine, o.spec_engine_accessories, o.spec_accessories].join('|'));
+    const known = new Set((await store.listProducts()).map(keyOf));
+    for (const it of items) {
+      const description = String(it.description || '').split('\n').map(l => l.trim()).filter(Boolean)
+        .slice(0, it.use_structured_specs ? 1 : undefined).join('\n');
+      if (!description) continue;
+      const rec = {
+        description, hsn_sac: it.hsn_sac, default_rate: 0, gst_percent: it.gst_percent, unit: 'Nos',
+        use_structured_specs: !!it.use_structured_specs,
+        spec_flow_head: it.use_structured_specs ? it.spec_flow_head : null,
+        spec_model: it.use_structured_specs ? it.spec_model : null,
+        spec_kw_rpm: it.use_structured_specs ? it.spec_kw_rpm : null,
+        spec_moc: it.use_structured_specs ? it.spec_moc : null,
+        use_engine_spec: !!it.use_engine_spec, spec_engine: it.use_engine_spec ? it.spec_engine : null,
+        use_engine_accessories: !!it.use_engine_accessories,
+        spec_engine_accessories: it.use_engine_accessories ? it.spec_engine_accessories : null,
+        use_accessories: !!it.use_accessories, spec_accessories: it.use_accessories ? it.spec_accessories : null
+      };
+      const key = keyOf(rec);
+      if (known.has(key)) continue;
+      await store.createProduct(rec);
+      known.add(key);
+    }
+  } catch (err) {
+    console.error('Could not add items to products:', err.message);
+  }
 }

@@ -356,13 +356,20 @@ async function renderDocumentEditor(root, params) {
         el('option', { value: '' }, ['Custom item...']),
         ...products.map(p => el('option', {
           value: p.id, ...(item.product_id == p.id ? { selected: 'selected' } : {})
-        }, [p.description]))
+        }, [String(p.description || '').split('\n')[0] + (p.spec_model ? ' — ' + p.spec_model : '')]))
       ]);
       productSelect.addEventListener('change', () => {
         const p = products.find(pp => String(pp.id) === productSelect.value);
         if (p) {
           item.product_id = p.id;
           item.description = p.description;
+          // Specs saved with the product go straight into their own fields and switch those toggles on.
+          item.use_structured_specs = !!p.use_structured_specs;
+          item.spec_flow_head = p.spec_flow_head || ''; item.spec_model = p.spec_model || '';
+          item.spec_kw_rpm = p.spec_kw_rpm || ''; item.spec_moc = p.spec_moc || '';
+          item.use_engine_spec = !!p.use_engine_spec; item.spec_engine = p.spec_engine || '';
+          item.use_engine_accessories = !!p.use_engine_accessories; item.spec_engine_accessories = p.spec_engine_accessories || '';
+          item.use_accessories = !!p.use_accessories; item.spec_accessories = p.spec_accessories || '';
           item.hsn_sac = p.hsn_sac;
           item.rate = p.default_rate;
           item.gst_percent = p.gst_percent;

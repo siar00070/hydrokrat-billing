@@ -289,3 +289,16 @@ alter table document_items add column if not exists use_acc_pricing_calc boolean
 
 -- Ready sale price add-on (added to the calculated rate as is)
 alter table document_items add column if not exists item_fixed_price numeric;
+
+-- Products can carry pump specs so picking one fills the spec fields
+alter table products add column if not exists use_structured_specs boolean default false;
+alter table products add column if not exists spec_flow_head text;
+alter table products add column if not exists spec_model text;
+alter table products add column if not exists spec_kw_rpm text;
+alter table products add column if not exists spec_moc text;
+alter table products add column if not exists use_engine_spec boolean default false;
+alter table products add column if not exists spec_engine text;
+alter table products add column if not exists use_engine_accessories boolean default false;
+alter table products add column if not exists spec_engine_accessories text;
+alter table products add column if not exists use_accessories boolean default false;
+alter table products add column if not exists spec_accessories text;

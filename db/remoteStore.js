@@ -167,11 +167,13 @@ function createRemoteStore(client) {
       const { items, ...docFields } = record;
       let docId = existingId;
 
+      let oldItemIds = [];
+
       if (existingId) {
         unwrap(await client.from('documents')
           .update({ ...docFields, updated_at: new Date().toISOString(), updated_by: uid })
           .eq('id', existingId));
-        unwrap(await client.from('document_items').delete().eq('document_id', existingId));
+        oldItemIds = unwrap(await client.from('document_items').select('id').eq('document_id', existingId)).map(r => r.id);
       } else {
         const created = unwrap(await client.from('documents')
           .insert({ ...docFields, created_by: uid, updated_by: uid })
@@ -179,9 +181,22 @@ function createRemoteStore(client) {
         docId = created.id;
       }
 
-      if (items && items.length > 0) {
-        const rows = items.map(it => ({ ...it, document_id: docId }));
-        unwrap(await client.from('document_items').insert(rows));
+      // New items go in before the old ones are removed, and a failed first save is undone,
+      // so an error never leaves an empty document behind or burns a document number.
+      try {
+        if (items && items.length > 0) {
+          const rows = items.map(it => ({ ...it, document_id: docId }));
+          unwrap(await client.from('document_items').insert(rows));
+        }
+      } catch (err) {
+        if (!existingId) {
+          await client.from('documents').delete().eq('id', docId);
+          await rollBackCounterIfLatest(docFields.doc_type, docFields.doc_number);
+        }
+        throw err;
+      }
+      if (oldItemIds.length > 0) {
+        unwrap(await client.from('document_items').delete().in('id', oldItemIds));
       }
 
       return this.getDocument(docId);
@@ -321,7 +336,15 @@ function normalizeProduct(p) {
   return {
     description: p.description || '', hsn_sac: p.hsn_sac || '',
     default_rate: Number(p.default_rate) || 0, gst_percent: Number(p.gst_percent) || 0,
-    unit: p.unit || 'Nos'
+    unit: p.unit || 'Nos',
+    ...(p.use_structured_specs !== undefined ? {
+      use_structured_specs: !!p.use_structured_specs,
+      spec_flow_head: p.spec_flow_head || null, spec_model: p.spec_model || null,
+      spec_kw_rpm: p.spec_kw_rpm || null, spec_moc: p.spec_moc || null,
+      use_engine_spec: !!p.use_engine_spec, spec_engine: p.spec_engine || null,
+      use_engine_accessories: !!p.use_engine_accessories, spec_engine_accessories: p.spec_engine_accessories || null,
+      use_accessories: !!p.use_accessories, spec_accessories: p.spec_accessories || null
+    } : {})
   };
 }
 
