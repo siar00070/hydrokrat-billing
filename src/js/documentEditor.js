@@ -1,4 +1,4 @@
-const DOC_TYPE_LABELS = { quotation: 'Quotation', proforma: 'Proforma Invoice', tax_invoice: 'Tax Invoice', delivery_challan: 'Delivery Challan', purchase_order: 'Purchase Order' };
+const DOC_TYPE_LABELS = { quotation: 'Quotation', proforma: 'Proforma Invoice', tax_invoice: 'Tax Invoice', delivery_challan: 'Delivery Challan', purchase_order: 'Purchase Order', techno_commercial: 'Techno Commercial Offer' };
 const HSN_PRESETS = ['84137010', '84137099'];
 
 async function renderDocumentEditor(root, params) {
@@ -54,7 +54,7 @@ async function renderDocumentEditor(root, params) {
   // ---- Doc type tabs (only for brand-new documents) ----
   if (!doc) {
     const tabRow = el('div', { class: 'btn-row', style: 'margin-bottom:14px' });
-    ['quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order'].forEach(t => {
+    ['quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order', 'techno_commercial'].forEach(t => {
       tabRow.appendChild(el('button', {
         class: `btn ${t === state.docType ? '' : 'secondary'}`,
         onclick: () => {
@@ -127,7 +127,7 @@ async function renderDocumentEditor(root, params) {
   card.appendChild(dateRow);
 
   let projectNameInput, enquiryNoInput;
-  if (docType === 'quotation' || docType === 'proforma' || docType === 'purchase_order') {
+  if (docType === 'quotation' || docType === 'proforma' || docType === 'purchase_order' || docType === 'techno_commercial') {
     projectNameInput = el('input', { value: state.projectName });
     enquiryNoInput = el('input', { value: state.enquiryNo });
     card.appendChild(el('div', { class: 'field-row' }, [
@@ -137,7 +137,7 @@ async function renderDocumentEditor(root, params) {
   }
 
   let revisedInput, revisionLabelSpan;
-  if (docType === 'quotation' || docType === 'proforma') {
+  if (docType === 'quotation' || docType === 'proforma' || docType === 'techno_commercial') {
     revisedInput = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
     revisedInput.checked = state.isRevised;
     revisionLabelSpan = el('span', { style: 'font-weight:600;color:#0e3a5f' }, [
@@ -426,7 +426,7 @@ async function renderDocumentEditor(root, params) {
         style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
       }, [accessoriesToggle, 'Use accessories field (booster pumps)']);
 
-      const pricingAllowed = ['quotation', 'proforma', 'tax_invoice'].includes(docType);
+      const pricingAllowed = ['quotation', 'proforma', 'tax_invoice', 'techno_commercial'].includes(docType);
       const usePricing = pricingAllowed && !!item.use_pricing_calc;
       const pricingToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
       pricingToggle.checked = usePricing;
@@ -874,6 +874,7 @@ function termsKeyFor(docType) {
   if (docType === 'quotation') return 'quotation_terms';
   if (docType === 'proforma') return 'proforma_terms';
   if (docType === 'purchase_order') return 'purchase_order_terms';
+  if (docType === 'techno_commercial') return 'techno_commercial_terms';
   return 'tax_invoice_terms';
 }
 

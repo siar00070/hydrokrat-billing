@@ -1,8 +1,8 @@
-const DOC_TYPE_ORDER = ['quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order'];
+const DOC_TYPE_ORDER = ['quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order', 'techno_commercial'];
 const DOC_SECTION_TITLES = {
   quotation: 'Quotations', proforma: 'Proforma Invoices',
   tax_invoice: 'Tax Invoices', delivery_challan: 'Delivery Challans',
-  purchase_order: 'Purchase Orders'
+  purchase_order: 'Purchase Orders', techno_commercial: 'Techno Commercial Offers'
 };
 
 // Gates the one truly irreversible action (permanent delete) behind the shared
@@ -254,6 +254,11 @@ async function renderDocumentsList(root) {
     }
     if (d.doc_type === 'quotation' || d.doc_type === 'proforma') {
       actions.push(el('span', { class: 'btn small secondary', onclick: async () => {
+        const created = await window.api.documents.duplicateAs(d.id, 'techno_commercial');
+        showToast(`Created ${created.doc_number}`);
+        navigate('document-editor', { docId: created.id });
+      } }, ['→ Convert to Techno Commercial Offer']));
+      actions.push(el('span', { class: 'btn small secondary', onclick: async () => {
         const created = await window.api.documents.duplicateAs(d.id, 'purchase_order');
         showToast(`Created ${created.doc_number} — select a supplier and save`);
         navigate('document-editor', { docId: created.id });
@@ -333,8 +338,8 @@ async function renderDocumentsList(root) {
   }
 
   function openDuplicateMenu(doc) {
-    const options = ['quotation', 'proforma', 'tax_invoice', 'delivery_challan'].filter(t => t !== doc.doc_type);
-    const labels = { quotation: 'Quotation', proforma: 'Proforma Invoice', tax_invoice: 'Tax Invoice', delivery_challan: 'Delivery Challan' };
+    const options = ['quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'techno_commercial'].filter(t => t !== doc.doc_type);
+    const labels = { quotation: 'Quotation', proforma: 'Proforma Invoice', tax_invoice: 'Tax Invoice', delivery_challan: 'Delivery Challan', techno_commercial: 'Techno Commercial Offer' };
     const overlay = el('div', { class: 'modal-overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
     const box = el('div', { class: 'modal-box' }, [
       el('h3', {}, [`Duplicate ${doc.doc_number} as...`]),

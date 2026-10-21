@@ -126,7 +126,7 @@ function registerIpc() {
     const original = await store.getDocument(id);
     if (!original) throw new Error('Document not found');
     const settings = await store.getSettings();
-    const termsKeyMap = { quotation: 'quotation_terms', proforma: 'proforma_terms', tax_invoice: 'tax_invoice_terms', purchase_order: 'purchase_order_terms' };
+    const termsKeyMap = { quotation: 'quotation_terms', proforma: 'proforma_terms', tax_invoice: 'tax_invoice_terms', purchase_order: 'purchase_order_terms', techno_commercial: 'techno_commercial_terms' };
     const termsKey = termsKeyMap[newDocType];
     const isPO = newDocType === 'purchase_order';
     const payload = {
@@ -136,22 +136,27 @@ function registerIpc() {
       customer_id: isPO ? null : original.customer_id,
       place_of_supply: isPO ? null : original.place_of_supply,
       discount: original.discount,
-      terms: termsKey ? settings[termsKey] : '',
+      terms: termsKey ? (settings[termsKey] || settings.quotation_terms) : '',
       notes: original.notes,
       project_name: original.project_name || null,
       enquiry_no: isPO ? (original.enquiry_no || original.doc_number) : (original.enquiry_no || null),
       items: (original.items || []).map(it => ({
         product_id: it.product_id, description: it.description, hsn_sac: it.hsn_sac,
-        qty: it.qty, rate: it.rate, gst_percent: it.gst_percent
+        qty: it.qty, rate: it.rate, gst_percent: it.gst_percent,
+        use_structured_specs: it.use_structured_specs, spec_flow_head: it.spec_flow_head, spec_model: it.spec_model,
+        spec_kw_rpm: it.spec_kw_rpm, spec_moc: it.spec_moc,
+        use_engine_spec: it.use_engine_spec, spec_engine: it.spec_engine,
+        use_engine_accessories: it.use_engine_accessories, spec_engine_accessories: it.spec_engine_accessories,
+        use_accessories: it.use_accessories, spec_accessories: it.spec_accessories
       }))
     };
     return saveDocument(payload, null);
   });
 
   // PDF export / print
-  const OUTPUT_FOLDER_BY_TYPE = { quotation: 'QT', proforma: 'PI', tax_invoice: 'TI', delivery_challan: 'DC', purchase_order: 'PO' };
+  const OUTPUT_FOLDER_BY_TYPE = { quotation: 'QT', proforma: 'PI', tax_invoice: 'TI', delivery_challan: 'DC', purchase_order: 'PO', techno_commercial: 'TCO' };
 
-  // Completed documents go straight into D:\Hydrokrat Billing outputs\<QT|PI|TI|DC|PO>.
+  // Completed documents go straight into D:\Hydrokrat Billing outputs\<QT|PI|TI|DC|PO|TCO>.
   // A PC without a D: drive falls back to Documents so saving never fails outright.
   function outputFolderFor(docType) {
     const sub = OUTPUT_FOLDER_BY_TYPE[docType];

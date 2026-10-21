@@ -67,6 +67,7 @@ async function renderSettings(root) {
     field('Proforma Invoice Terms', 'proforma_terms', { textarea: true, rows: 4 }),
     field('Tax Invoice Terms', 'tax_invoice_terms', { textarea: true, rows: 4 }),
     field('Purchase Order Terms', 'purchase_order_terms', { textarea: true, rows: 4 }),
+    field('Techno Commercial Offer Terms', 'techno_commercial_terms', { textarea: true, rows: 4 }),
     field('Default Notes', 'default_notes', { textarea: true, rows: 2 }),
     field('Default GST % for new products', 'default_gst_percent', { type: 'number' })
   ]);

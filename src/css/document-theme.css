@@ -427,3 +427,10 @@ table.hsn-summary-table td {
   body { margin: 0; }
   .doc-page { box-shadow: none; padding: 12mm 10mm; }
 }
+
+.doc-title-box .ksb-logo {
+  display: block;
+  margin: 14px 0 0 auto;
+  width: 130px;
+  height: auto;
+}

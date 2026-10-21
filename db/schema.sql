@@ -302,3 +302,10 @@ alter table products add column if not exists use_engine_accessories boolean def
 alter table products add column if not exists spec_engine_accessories text;
 alter table products add column if not exists use_accessories boolean default false;
 alter table products add column if not exists spec_accessories text;
+
+-- ---------- Migration: Techno Commercial Offer (TCO-HV) ----------
+alter table documents drop constraint if exists documents_doc_type_check;
+alter table documents add constraint documents_doc_type_check
+  check (doc_type in ('quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order', 'techno_commercial'));
+alter table company_settings add column if not exists techno_commercial_terms text;
+update company_settings set techno_commercial_terms = quotation_terms where id = 1 and techno_commercial_terms is null;

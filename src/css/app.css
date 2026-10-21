@@ -260,6 +260,7 @@ table.data-table tr:hover td { background: #f8fafc; }
 .badge.tax_invoice { background: #0e3a5f; }
 .badge.delivery_challan { background: #b45309; }
 .badge.purchase_order { background: #5b21b6; }
+.badge.techno_commercial { background: #0f766e; }
 
 .payment-badge {
   display: inline-block;

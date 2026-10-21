@@ -1,4 +1,4 @@
-const PREFIXES = { quotation: 'QT-HV', proforma: 'PI-HV', tax_invoice: 'TI-HV', delivery_challan: 'DC-HV', purchase_order: 'PO-HV' };
+const PREFIXES = { quotation: 'QT-HV', proforma: 'PI-HV', tax_invoice: 'TI-HV', delivery_challan: 'DC-HV', purchase_order: 'PO-HV', techno_commercial: 'TCO-HV' };
 
 function createRemoteStore(client) {
   async function currentUserId() {

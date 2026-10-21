@@ -26,6 +26,11 @@ async function renderDashboard(root) {
       el('div', { class: 'icon' }, ['🏭']),
       el('div', { class: 'title' }, ['New Purchase Order']),
       el('div', { class: 'sub' }, ['Order goods from a supplier'])
+    ]),
+    el('div', { class: 'quick-create-card', onclick: () => navigate('document-editor', { docType: 'techno_commercial' }) }, [
+      el('div', { class: 'icon' }, ['📑']),
+      el('div', { class: 'title' }, ['New Techno Commercial Offer']),
+      el('div', { class: 'sub' }, ['Technical + commercial offer'])
     ])
   ]);
   root.appendChild(el('div', { class: 'card' }, [quickCreate]));
@@ -114,7 +119,7 @@ async function renderDashboard(root) {
     return;
   }
 
-  const recentTitles = { quotation: 'Recent Quotations', proforma: 'Recent Proforma Invoices', tax_invoice: 'Recent Tax Invoices', delivery_challan: 'Recent Delivery Challans', purchase_order: 'Recent Purchase Orders' };
+  const recentTitles = { quotation: 'Recent Quotations', proforma: 'Recent Proforma Invoices', tax_invoice: 'Recent Tax Invoices', delivery_challan: 'Recent Delivery Challans', purchase_order: 'Recent Purchase Orders', techno_commercial: 'Recent Techno Commercial Offers' };
   let activeRecentType = 'quotation';
 
   const tabRow = el('div', { class: 'btn-row', style: 'margin-bottom:10px' });
@@ -122,7 +127,7 @@ async function renderDashboard(root) {
 
   function renderRecentTabs() {
     tabRow.innerHTML = '';
-    ['quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order'].forEach(type => {
+    ['quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order', 'techno_commercial'].forEach(type => {
       tabRow.appendChild(el('button', {
         class: `btn small ${type === activeRecentType ? '' : 'secondary'}`,
         onclick: () => { activeRecentType = type; renderRecentTabs(); renderRecentTable(); }
@@ -164,6 +169,6 @@ async function renderDashboard(root) {
 }
 
 function badgeFor(docType) {
-  const labels = { quotation: 'Quotation', proforma: 'Proforma', tax_invoice: 'Tax Invoice', delivery_challan: 'Delivery Challan', purchase_order: 'Purchase Order' };
+  const labels = { quotation: 'Quotation', proforma: 'Proforma', tax_invoice: 'Tax Invoice', delivery_challan: 'Delivery Challan', purchase_order: 'Purchase Order', techno_commercial: 'Techno Commercial' };
   return el('span', { class: `badge ${docType}` }, [labels[docType] || docType]);
 }

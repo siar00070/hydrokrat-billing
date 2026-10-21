@@ -3,7 +3,8 @@ const DOC_LABEL = {
   proforma: 'PROFORMA INVOICE',
   tax_invoice: 'TAX INVOICE',
   delivery_challan: 'DELIVERY CHALLAN',
-  purchase_order: 'PURCHASE ORDER'
+  purchase_order: 'PURCHASE ORDER',
+  techno_commercial: 'TECHNO COMMERCIAL OFFER'
 };
 
 function esc(s) {
@@ -215,6 +216,7 @@ function buildDocumentHtml(doc, settings, customer, cssText) {
       <div class="doc-title">${label}</div>
       <div class="doc-number-pill">${esc(doc.doc_number)}</div>
       ${doc.is_revised ? `<div class="revised-tag">REVISED (Rev.${esc(doc.revision_no || 1)})</div>` : ''}
+      ${doc.doc_type === 'techno_commercial' && typeof KSB_LOGO_DATA_URI !== 'undefined' ? `<img src="${KSB_LOGO_DATA_URI}" class="ksb-logo" alt="KSB">` : ''}
     </div>
   </div>
 
