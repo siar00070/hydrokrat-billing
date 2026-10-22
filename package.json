@@ -1,7 +1,7 @@
 {
   "name": "hv-billing",
   "productName": "HV Billing",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "Hydrokrat Ventures - Quotation, Proforma Invoice & Tax Invoice billing software",
   "main": "main.js",
   "author": "Hydrokrat Ventures",
