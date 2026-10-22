@@ -11,22 +11,18 @@ function createRemoteStore(client) {
     return data;
   }
 
-  // If the document being deleted holds the highest sequence number issued
-  // so far for its doc_type+year, roll the counter back by one so the next
-  // document created reuses that number instead of leaving a permanent gap.
-  // Only the single most-recently-issued number is ever reclaimed this way —
-  // deleting an older document never touches the counter — so the original
-  // multi-branch guarantee (two branches can never be handed the same number)
-  // stays intact except for this one narrow, low-risk case.
+  // After a delete, restore or failed save, set the counter to the highest number still in use
+  // (live documents only) for that doc_type+year. Deleting the most recent document therefore frees its
+  // number for the next one; deleting an older document leaves the counter alone, so there is never a
+  // risk of handing out a number that a live document already holds. Also heals a counter that drifted.
   async function rollBackCounterIfLatest(docType, docNumber) {
     const parts = String(docNumber || '').split('-');
-    const seq = parseInt(parts[parts.length - 1], 10);
     const year = parseInt(parts[parts.length - 2], 10);
-    if (!seq || !year) return;
-    const { data } = await client.from('counters').select('last_seq').eq('doc_type', docType).eq('year', year).maybeSingle();
-    if (data && data.last_seq === seq) {
-      await client.from('counters').update({ last_seq: seq - 1 }).eq('doc_type', docType).eq('year', year);
-    }
+    if (!year) return;
+    const rows = unwrap(await client.from('documents').select('doc_number')
+      .eq('doc_type', docType).is('deleted_at', null).like('doc_number', '%-' + year + '-%').limit(5000));
+    const max = rows.reduce((m, r) => Math.max(m, parseInt(String(r.doc_number).split('-').pop(), 10) || 0), 0);
+    await client.from('counters').update({ last_seq: max }).eq('doc_type', docType).eq('year', year);
   }
 
   return {
@@ -212,7 +208,7 @@ function createRemoteStore(client) {
     },
     async restoreDocument(id) {
       const uid = await currentUserId();
-      const doc = unwrap(await client.from('documents').select('doc_number').eq('id', id).single());
+      const doc = unwrap(await client.from('documents').select('doc_type, doc_number').eq('id', id).single());
       const clashes = unwrap(await client.from('documents')
         .select('id').eq('doc_number', doc.doc_number).is('deleted_at', null).neq('id', id));
       if (clashes.length > 0) {
@@ -221,6 +217,7 @@ function createRemoteStore(client) {
       unwrap(await client.from('documents')
         .update({ deleted_at: null, updated_by: uid })
         .eq('id', id));
+      await rollBackCounterIfLatest(doc.doc_type, doc.doc_number);
       return true;
     },
     async purgeDocument(id) {
