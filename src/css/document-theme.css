@@ -434,3 +434,7 @@ table.hsn-summary-table td {
   width: 130px;
   height: auto;
 }
+
+.item-desc-wrap { display: flex; align-items: flex-start; gap: 10px; }
+.item-desc-wrap .item-desc-text { flex: 1; min-width: 0; }
+.item-desc-wrap .item-img { width: 88px; max-height: 88px; object-fit: contain; flex: none; }

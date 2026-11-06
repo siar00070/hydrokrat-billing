@@ -370,6 +370,7 @@ async function renderDocumentEditor(root, params) {
           item.use_engine_spec = !!p.use_engine_spec; item.spec_engine = p.spec_engine || '';
           item.use_engine_accessories = !!p.use_engine_accessories; item.spec_engine_accessories = p.spec_engine_accessories || '';
           item.use_accessories = !!p.use_accessories; item.spec_accessories = p.spec_accessories || '';
+          item.image_data = p.image_data || null;
           item.hsn_sac = p.hsn_sac;
           item.rate = p.default_rate;
           item.gst_percent = p.gst_percent;
@@ -522,6 +523,12 @@ async function renderDocumentEditor(root, params) {
         const accessoriesInput = el('input', { value: item.spec_accessories || '', placeholder: 'e.g. Pressure tank, pressure switch, non-return valve, control panel' });
         accessoriesInput.addEventListener('input', () => { item.spec_accessories = accessoriesInput.value; });
         specFields.push(el('div', { class: 'field' }, [el('label', {}, ['Accessories']), accessoriesInput]));
+      }
+      if (['quotation', 'proforma', 'techno_commercial'].includes(docType)) {
+        specFields.push(el('div', { class: 'field', style: 'flex-basis:100%' }, [
+          el('label', {}, ['Pump image (printed beside the description)']),
+          buildImagePicker(item.image_data || null, (uri) => { item.image_data = uri; })
+        ]));
       }
       if (usePricing || useAccPricing) {
         // Internal only: none of these four values are printed on the document, only the resulting Rate.
@@ -851,7 +858,8 @@ function emptyItem() {
     use_accessories: false, spec_accessories: '',
     use_pricing_calc: false, use_acc_pricing_calc: false, item_lp: null, item_discount_pct: null, item_freight: null, item_margin_pct: null,
     item_acc_lp: null, item_acc_discount_pct: null, item_eng_acc_lp: null, item_eng_acc_discount_pct: null,
-    item_fixed_price: null
+    item_fixed_price: null,
+    image_data: null
   };
 }
 

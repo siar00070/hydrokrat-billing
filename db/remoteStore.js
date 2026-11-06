@@ -334,6 +334,7 @@ function normalizeProduct(p) {
     description: p.description || '', hsn_sac: p.hsn_sac || '',
     default_rate: Number(p.default_rate) || 0, gst_percent: Number(p.gst_percent) || 0,
     unit: p.unit || 'Nos',
+    ...(p.image_data !== undefined ? { image_data: p.image_data || null } : {}),
     ...(p.use_structured_specs !== undefined ? {
       use_structured_specs: !!p.use_structured_specs,
       spec_flow_head: p.spec_flow_head || null, spec_model: p.spec_model || null,

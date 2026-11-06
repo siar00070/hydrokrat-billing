@@ -314,3 +314,7 @@ update company_settings set techno_commercial_terms = quotation_terms where id =
 drop index if exists documents_doc_type_number_uk;
 create unique index if not exists documents_doc_type_number_live_uk
   on documents(doc_type, doc_number) where deleted_at is null;
+
+-- ---------- Migration: pump images (small JPEG data URIs) on products and document items ----------
+alter table products add column if not exists image_data text;
+alter table document_items add column if not exists image_data text;

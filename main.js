@@ -147,7 +147,8 @@ function registerIpc() {
         spec_kw_rpm: it.spec_kw_rpm, spec_moc: it.spec_moc,
         use_engine_spec: it.use_engine_spec, spec_engine: it.spec_engine,
         use_engine_accessories: it.use_engine_accessories, spec_engine_accessories: it.spec_engine_accessories,
-        use_accessories: it.use_accessories, spec_accessories: it.spec_accessories
+        use_accessories: it.use_accessories, spec_accessories: it.spec_accessories,
+        image_data: it.image_data || null
       }))
     };
     return saveDocument(payload, null);
@@ -445,6 +446,7 @@ async function saveDocument(payload, existingId) {
     item_freight: (it.use_pricing_calc || it.use_acc_pricing_calc) ? (it.item_freight ?? null) : null,
     item_margin_pct: (it.use_pricing_calc || it.use_acc_pricing_calc) ? (it.item_margin_pct ?? null) : null,
     item_fixed_price: (it.use_pricing_calc || it.use_acc_pricing_calc) ? (it.item_fixed_price ?? null) : null,
+    image_data: ['quotation', 'proforma', 'techno_commercial'].includes(payload.doc_type) ? (it.image_data || null) : null,
     item_acc_lp: it.use_acc_pricing_calc ? (it.item_acc_lp ?? null) : null,
     item_acc_discount_pct: it.use_acc_pricing_calc ? (it.item_acc_discount_pct ?? null) : null,
     item_eng_acc_lp: it.use_acc_pricing_calc ? (it.item_eng_acc_lp ?? null) : null,
@@ -549,7 +551,8 @@ async function addNewItemsToProducts(items) {
         use_engine_spec: !!it.use_engine_spec, spec_engine: it.use_engine_spec ? it.spec_engine : null,
         use_engine_accessories: !!it.use_engine_accessories,
         spec_engine_accessories: it.use_engine_accessories ? it.spec_engine_accessories : null,
-        use_accessories: !!it.use_accessories, spec_accessories: it.use_accessories ? it.spec_accessories : null
+        use_accessories: !!it.use_accessories, spec_accessories: it.use_accessories ? it.spec_accessories : null,
+        image_data: it.image_data || null
       };
       const key = keyOf(rec);
       if (known.has(key)) continue;

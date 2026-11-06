@@ -73,10 +73,15 @@ function buildDocumentHtml(doc, settings, customer, cssText) {
   const isDeliveryChallan = doc.doc_type === 'delivery_challan';
   const showValidUntil = doc.doc_type !== 'tax_invoice' && doc.doc_type !== 'delivery_challan' && doc.valid_until;
 
+  const showImages = ['quotation', 'proforma', 'techno_commercial'].includes(doc.doc_type);
+  const descCell = (it) => (showImages && it.image_data)
+    ? `<div class="item-desc-wrap"><div class="item-desc-text">${buildItemDescHtml(it)}</div><img class="item-img" src="${esc(it.image_data)}" alt=""></div>`
+    : buildItemDescHtml(it);
+
   const itemRows = (doc.items || []).map((it, idx) => `
     <tr>
       <td class="num">${idx + 1}</td>
-      <td>${buildItemDescHtml(it)}</td>
+      <td>${descCell(it)}</td>
       <td>${esc(it.hsn_sac)}</td>
       <td class="num">${esc(it.qty)}</td>
       <td class="num">${fmtMoney(it.rate)}</td>
