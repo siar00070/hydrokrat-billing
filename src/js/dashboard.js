@@ -31,6 +31,11 @@ async function renderDashboard(root) {
       el('div', { class: 'icon' }, ['📑']),
       el('div', { class: 'title' }, ['New Techno Commercial Offer']),
       el('div', { class: 'sub' }, ['Technical + commercial offer'])
+    ]),
+    el('div', { class: 'quick-create-card', onclick: () => navigate('document-editor', { docType: 'order_acceptance' }) }, [
+      el('div', { class: 'icon' }, ['✅']),
+      el('div', { class: 'title' }, ['New Order Acceptance']),
+      el('div', { class: 'sub' }, ['Confirm an order received from a customer'])
     ])
   ]);
   root.appendChild(el('div', { class: 'card' }, [quickCreate]));
@@ -119,7 +124,7 @@ async function renderDashboard(root) {
     return;
   }
 
-  const recentTitles = { quotation: 'Recent Quotations', proforma: 'Recent Proforma Invoices', tax_invoice: 'Recent Tax Invoices', delivery_challan: 'Recent Delivery Challans', purchase_order: 'Recent Purchase Orders', techno_commercial: 'Recent Techno Commercial Offers' };
+  const recentTitles = { quotation: 'Recent Quotations', proforma: 'Recent Proforma Invoices', tax_invoice: 'Recent Tax Invoices', delivery_challan: 'Recent Delivery Challans', purchase_order: 'Recent Purchase Orders', techno_commercial: 'Recent Techno Commercial Offers', order_acceptance: 'Recent Order Acceptances' };
   let activeRecentType = 'quotation';
 
   const tabRow = el('div', { class: 'btn-row', style: 'margin-bottom:10px' });
@@ -127,7 +132,7 @@ async function renderDashboard(root) {
 
   function renderRecentTabs() {
     tabRow.innerHTML = '';
-    ['quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order', 'techno_commercial'].forEach(type => {
+    ['quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order', 'techno_commercial', 'order_acceptance'].forEach(type => {
       tabRow.appendChild(el('button', {
         class: `btn small ${type === activeRecentType ? '' : 'secondary'}`,
         onclick: () => { activeRecentType = type; renderRecentTabs(); renderRecentTable(); }
@@ -169,6 +174,6 @@ async function renderDashboard(root) {
 }
 
 function badgeFor(docType) {
-  const labels = { quotation: 'Quotation', proforma: 'Proforma', tax_invoice: 'Tax Invoice', delivery_challan: 'Delivery Challan', purchase_order: 'Purchase Order', techno_commercial: 'Techno Commercial' };
+  const labels = { quotation: 'Quotation', proforma: 'Proforma', tax_invoice: 'Tax Invoice', delivery_challan: 'Delivery Challan', purchase_order: 'Purchase Order', techno_commercial: 'Techno Commercial', order_acceptance: 'Order Acceptance' };
   return el('span', { class: `badge ${docType}` }, [labels[docType] || docType]);
 }

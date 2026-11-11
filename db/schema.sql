@@ -318,3 +318,10 @@ create unique index if not exists documents_doc_type_number_live_uk
 -- ---------- Migration: pump images (small JPEG data URIs) on products and document items ----------
 alter table products add column if not exists image_data text;
 alter table document_items add column if not exists image_data text;
+
+-- ---------- Migration: Order Acceptance (OA-HV) ----------
+alter table documents drop constraint if exists documents_doc_type_check;
+alter table documents add constraint documents_doc_type_check
+  check (doc_type in ('quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order', 'techno_commercial', 'order_acceptance'));
+alter table company_settings add column if not exists order_acceptance_terms text;
+update company_settings set order_acceptance_terms = quotation_terms where id = 1 and order_acceptance_terms is null;

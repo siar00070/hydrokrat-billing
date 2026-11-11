@@ -261,6 +261,7 @@ table.data-table tr:hover td { background: #f8fafc; }
 .badge.delivery_challan { background: #b45309; }
 .badge.purchase_order { background: #5b21b6; }
 .badge.techno_commercial { background: #0f766e; }
+.badge.order_acceptance { background: #15803d; }
 
 .payment-badge {
   display: inline-block;

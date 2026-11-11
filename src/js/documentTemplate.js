@@ -4,7 +4,8 @@ const DOC_LABEL = {
   tax_invoice: 'TAX INVOICE',
   delivery_challan: 'DELIVERY CHALLAN',
   purchase_order: 'PURCHASE ORDER',
-  techno_commercial: 'TECHNO COMMERCIAL OFFER'
+  techno_commercial: 'TECHNO COMMERCIAL OFFER',
+  order_acceptance: 'ORDER ACCEPTANCE'
 };
 
 function esc(s) {

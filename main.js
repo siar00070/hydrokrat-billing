@@ -126,7 +126,7 @@ function registerIpc() {
     const original = await store.getDocument(id);
     if (!original) throw new Error('Document not found');
     const settings = await store.getSettings();
-    const termsKeyMap = { quotation: 'quotation_terms', proforma: 'proforma_terms', tax_invoice: 'tax_invoice_terms', purchase_order: 'purchase_order_terms', techno_commercial: 'techno_commercial_terms' };
+    const termsKeyMap = { quotation: 'quotation_terms', proforma: 'proforma_terms', tax_invoice: 'tax_invoice_terms', purchase_order: 'purchase_order_terms', techno_commercial: 'techno_commercial_terms', order_acceptance: 'order_acceptance_terms' };
     const termsKey = termsKeyMap[newDocType];
     const isPO = newDocType === 'purchase_order';
     const payload = {
@@ -155,9 +155,9 @@ function registerIpc() {
   });
 
   // PDF export / print
-  const OUTPUT_FOLDER_BY_TYPE = { quotation: 'QT', proforma: 'PI', tax_invoice: 'TI', delivery_challan: 'DC', purchase_order: 'PO', techno_commercial: 'TCO' };
+  const OUTPUT_FOLDER_BY_TYPE = { quotation: 'QT', proforma: 'PI', tax_invoice: 'TI', delivery_challan: 'DC', purchase_order: 'PO', techno_commercial: 'TCO', order_acceptance: 'OA' };
 
-  // Completed documents go straight into D:\Hydrokrat Billing outputs\<QT|PI|TI|DC|PO|TCO>.
+  // Completed documents go straight into D:\Hydrokrat Billing outputs\<QT|PI|TI|DC|PO|TCO|OA>.
   // A PC without a D: drive falls back to Documents so saving never fails outright.
   function outputFolderFor(docType) {
     const sub = OUTPUT_FOLDER_BY_TYPE[docType];
