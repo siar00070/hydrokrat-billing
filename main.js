@@ -148,6 +148,7 @@ function registerIpc() {
         use_engine_spec: it.use_engine_spec, spec_engine: it.spec_engine,
         use_engine_accessories: it.use_engine_accessories, spec_engine_accessories: it.spec_engine_accessories,
         use_accessories: it.use_accessories, spec_accessories: it.spec_accessories,
+        use_hvac_accessories: it.use_hvac_accessories, spec_hvac_accessories: it.spec_hvac_accessories,
         image_data: it.image_data || null
       }))
     };
@@ -439,6 +440,8 @@ async function saveDocument(payload, existingId) {
     spec_engine_accessories: it.use_engine_accessories ? (it.spec_engine_accessories || null) : null,
     use_accessories: !!it.use_accessories,
     spec_accessories: it.use_accessories ? (it.spec_accessories || null) : null,
+    use_hvac_accessories: !!it.use_hvac_accessories,
+    spec_hvac_accessories: it.use_hvac_accessories ? (it.spec_hvac_accessories || null) : null,
     use_pricing_calc: !!it.use_pricing_calc,
     use_acc_pricing_calc: !!it.use_acc_pricing_calc,
     item_lp: it.use_pricing_calc ? (it.item_lp ?? null) : null,
@@ -451,6 +454,8 @@ async function saveDocument(payload, existingId) {
     item_acc_discount_pct: it.use_acc_pricing_calc ? (it.item_acc_discount_pct ?? null) : null,
     item_eng_acc_lp: it.use_acc_pricing_calc ? (it.item_eng_acc_lp ?? null) : null,
     item_eng_acc_discount_pct: it.use_acc_pricing_calc ? (it.item_eng_acc_discount_pct ?? null) : null,
+    item_hvac_lp: it.use_acc_pricing_calc ? (it.item_hvac_lp ?? null) : null,
+    item_hvac_discount_pct: it.use_acc_pricing_calc ? (it.item_hvac_discount_pct ?? null) : null,
     sort_order: idx
   }));
 
@@ -535,7 +540,7 @@ async function addNewItemsToProducts(items) {
   try {
     const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
     const keyOf = (o) => norm([o.description, o.spec_flow_head, o.spec_model, o.spec_kw_rpm, o.spec_moc,
-      o.spec_engine, o.spec_engine_accessories, o.spec_accessories].join('|'));
+      o.spec_engine, o.spec_engine_accessories, o.spec_accessories, o.spec_hvac_accessories].join('|'));
     const known = new Set((await store.listProducts()).map(keyOf));
     for (const it of items) {
       const description = String(it.description || '').split('\n').map(l => l.trim()).filter(Boolean)
@@ -552,6 +557,7 @@ async function addNewItemsToProducts(items) {
         use_engine_accessories: !!it.use_engine_accessories,
         spec_engine_accessories: it.use_engine_accessories ? it.spec_engine_accessories : null,
         use_accessories: !!it.use_accessories, spec_accessories: it.use_accessories ? it.spec_accessories : null,
+        use_hvac_accessories: !!it.use_hvac_accessories, spec_hvac_accessories: it.use_hvac_accessories ? it.spec_hvac_accessories : null,
         image_data: it.image_data || null
       };
       const key = keyOf(rec);

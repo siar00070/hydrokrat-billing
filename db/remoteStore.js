@@ -341,7 +341,8 @@ function normalizeProduct(p) {
       spec_kw_rpm: p.spec_kw_rpm || null, spec_moc: p.spec_moc || null,
       use_engine_spec: !!p.use_engine_spec, spec_engine: p.spec_engine || null,
       use_engine_accessories: !!p.use_engine_accessories, spec_engine_accessories: p.spec_engine_accessories || null,
-      use_accessories: !!p.use_accessories, spec_accessories: p.spec_accessories || null
+      use_accessories: !!p.use_accessories, spec_accessories: p.spec_accessories || null,
+      use_hvac_accessories: !!p.use_hvac_accessories, spec_hvac_accessories: p.spec_hvac_accessories || null
     } : {})
   };
 }

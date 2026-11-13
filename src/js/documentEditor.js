@@ -329,7 +329,8 @@ async function renderDocumentEditor(root, params) {
     const title = (parent.description || '').split('\n')[0].trim();
     const parts = [
       { on: parent.use_accessories, name: 'Accessories', spec: parent.spec_accessories, lp: parent.item_acc_lp, d: parent.item_acc_discount_pct },
-      { on: parent.use_engine_accessories, name: 'Engine Accessories', spec: parent.spec_engine_accessories, lp: parent.item_eng_acc_lp, d: parent.item_eng_acc_discount_pct }
+      { on: parent.use_engine_accessories, name: 'Engine Accessories', spec: parent.spec_engine_accessories, lp: parent.item_eng_acc_lp, d: parent.item_eng_acc_discount_pct },
+      { on: parent.use_hvac_accessories, name: 'HVAC Panel Accessories', spec: parent.spec_hvac_accessories, lp: parent.item_hvac_lp, d: parent.item_hvac_discount_pct }
     ].filter(p => p.on);
     const added = parts.map(p => {
       const row = emptyItem();
@@ -342,7 +343,7 @@ async function renderDocumentEditor(root, params) {
       row.rate = computeItemPricing(row).rate;
       return row;
     });
-    parent.use_accessories = false; parent.use_engine_accessories = false; parent.use_acc_pricing_calc = false;
+    parent.use_accessories = false; parent.use_engine_accessories = false; parent.use_hvac_accessories = false; parent.use_acc_pricing_calc = false;
     if (parts.some(p => p.name === 'Accessories')) parent.item_fixed_price = null;
     if (parent.use_pricing_calc) parent.rate = computeItemPricing(parent).rate;
     state.items.splice(idx + 1, 0, ...added);
@@ -370,6 +371,7 @@ async function renderDocumentEditor(root, params) {
           item.use_engine_spec = !!p.use_engine_spec; item.spec_engine = p.spec_engine || '';
           item.use_engine_accessories = !!p.use_engine_accessories; item.spec_engine_accessories = p.spec_engine_accessories || '';
           item.use_accessories = !!p.use_accessories; item.spec_accessories = p.spec_accessories || '';
+          item.use_hvac_accessories = !!p.use_hvac_accessories; item.spec_hvac_accessories = p.spec_hvac_accessories || '';
           item.image_data = p.image_data || null;
           item.hsn_sac = p.hsn_sac;
           item.rate = p.default_rate;
@@ -427,6 +429,14 @@ async function renderDocumentEditor(root, params) {
         style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
       }, [accessoriesToggle, 'Use accessories field (booster pumps)']);
 
+      const useHvac = !!item.use_hvac_accessories;
+      const hvacToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+      hvacToggle.checked = useHvac;
+      hvacToggle.addEventListener('change', () => { item.use_hvac_accessories = hvacToggle.checked; if (item.use_pricing_calc || item.use_acc_pricing_calc) item.rate = computeItemPricing(item).rate; renderItems(); });
+      const hvacToggleLabel = el('label', {
+        style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
+      }, [hvacToggle, 'Use HVAC panel accessories field']);
+
       const pricingAllowed = ['quotation', 'proforma', 'tax_invoice', 'techno_commercial', 'order_acceptance', 'purchase_order'].includes(docType);
       const usePricing = pricingAllowed && !!item.use_pricing_calc;
       const pricingToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
@@ -436,11 +446,11 @@ async function renderDocumentEditor(root, params) {
         style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
       }, [pricingToggle, 'Calculate pump rate from list price (internal)']) : null;
 
-      const useAccPricing = pricingAllowed && !!item.use_acc_pricing_calc && (useAccessories || useEngineAccessories);
+      const useAccPricing = pricingAllowed && !!item.use_acc_pricing_calc && (useAccessories || useEngineAccessories || useHvac);
       const accPricingToggle = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
       accPricingToggle.checked = useAccPricing;
       accPricingToggle.addEventListener('change', () => { item.use_acc_pricing_calc = accPricingToggle.checked; renderItems(); });
-      const accPricingToggleLabel = (pricingAllowed && (useAccessories || useEngineAccessories)) ? el('label', {
+      const accPricingToggleLabel = (pricingAllowed && (useAccessories || useEngineAccessories || useHvac)) ? el('label', {
         style: 'display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6b7280;cursor:pointer;margin-top:4px'
       }, [accPricingToggle, 'Calculate accessories price from list price (internal)']) : null;
 
@@ -478,7 +488,7 @@ async function renderDocumentEditor(root, params) {
       const amount = (item.qty || 0) * (item.rate || 0);
 
       itemsBody.appendChild(el('tr', {}, [
-        el('td', {}, [productSelect, descInput, specsToggleLabel, engineSpecToggleLabel, engineAccessoriesToggleLabel, accessoriesToggleLabel, pricingToggleLabel, accPricingToggleLabel].filter(Boolean)),
+        el('td', {}, [productSelect, descInput, specsToggleLabel, engineSpecToggleLabel, engineAccessoriesToggleLabel, accessoriesToggleLabel, hvacToggleLabel, pricingToggleLabel, accPricingToggleLabel].filter(Boolean)),
         el('td', {}, [hsnSelect, hsnCustomInput]),
         el('td', {}, [qtyInput]),
         el('td', {}, [rateInput]),
@@ -524,6 +534,11 @@ async function renderDocumentEditor(root, params) {
         accessoriesInput.addEventListener('input', () => { item.spec_accessories = accessoriesInput.value; });
         specFields.push(el('div', { class: 'field' }, [el('label', {}, ['Accessories']), accessoriesInput]));
       }
+      if (useHvac) {
+        const hvacInput = el('input', { value: item.spec_hvac_accessories || '', placeholder: 'e.g. Starter panel, VFD, pressure transmitter, flow switch' });
+        hvacInput.addEventListener('input', () => { item.spec_hvac_accessories = hvacInput.value; });
+        specFields.push(el('div', { class: 'field' }, [el('label', {}, ['HVAC Panel Accessories']), hvacInput]));
+      }
       if (['quotation', 'proforma', 'techno_commercial'].includes(docType)) {
         specFields.push(el('div', { class: 'field', style: 'flex-basis:100%' }, [
           el('label', {}, ['Pump image (printed beside the description)']),
@@ -538,6 +553,7 @@ async function renderDocumentEditor(root, params) {
           if (usePricing) parts.push(`Pump ${fmtMoney(c.pump)}`);
           if (useAccPricing && item.use_accessories) parts.push(`Accessories ${fmtMoney(c.acc)}`);
           if (useAccPricing && item.use_engine_accessories) parts.push(`Engine accessories ${fmtMoney(c.engAcc)}`);
+          if (useAccPricing && item.use_hvac_accessories) parts.push(`HVAC panel accessories ${fmtMoney(c.hvac)}`);
           parts.push(`Freight ${fmtMoney(c.freight)}`, `Margin ${fmtMoney(c.margin)}`);
           if (c.fixed) parts.push(`Ready price ${fmtMoney(c.fixed)}`);
           return `${parts.join(' + ')} = Rate ${fmtMoney(c.rate)}`;
@@ -572,6 +588,12 @@ async function renderDocumentEditor(root, params) {
             pricingField('Engine Accessories Discount %', 'item_eng_acc_discount_pct', 'e.g. 20')
           );
         }
+        if (useAccPricing && item.use_hvac_accessories) {
+          specFields.push(
+            pricingField('HVAC Panel Accessories LP', 'item_hvac_lp', 'e.g. 40000'),
+            pricingField('HVAC Panel Accessories Discount %', 'item_hvac_discount_pct', 'e.g. 20')
+          );
+        }
         specFields.push(
           pricingField('Freight %', 'item_freight', 'e.g. 3'),
           pricingField('Margin %', 'item_margin_pct', 'e.g. 15'),
@@ -586,7 +608,7 @@ async function renderDocumentEditor(root, params) {
           }, ['Split accessories into separate line(s)']));
         }
         // Show the breakdown for values already saved, without overwriting a hand-edited rate on open.
-        calcNote.textContent = (item.item_lp || item.item_acc_lp || item.item_eng_acc_lp)
+        calcNote.textContent = (item.item_lp || item.item_acc_lp || item.item_eng_acc_lp || item.item_hvac_lp)
           ? `${describeCalc(computeItemPricing(item))} — edit any field to recalculate the Rate`
           : 'Enter List Price to calculate the Rate';
       }
@@ -856,6 +878,7 @@ function emptyItem() {
     use_engine_spec: false, spec_engine: '',
     use_engine_accessories: false, spec_engine_accessories: '',
     use_accessories: false, spec_accessories: '',
+    use_hvac_accessories: false, spec_hvac_accessories: '', item_hvac_lp: null, item_hvac_discount_pct: null,
     use_pricing_calc: false, use_acc_pricing_calc: false, item_lp: null, item_discount_pct: null, item_freight: null, item_margin_pct: null,
     item_acc_lp: null, item_acc_discount_pct: null, item_eng_acc_lp: null, item_eng_acc_discount_pct: null,
     item_fixed_price: null,
@@ -870,12 +893,13 @@ function computeItemPricing(item) {
   const pump = item.use_pricing_calc ? disc(item.item_lp, item.item_discount_pct) : 0;
   const acc = item.use_acc_pricing_calc && item.use_accessories ? disc(item.item_acc_lp, item.item_acc_discount_pct) : 0;
   const engAcc = item.use_acc_pricing_calc && item.use_engine_accessories ? disc(item.item_eng_acc_lp, item.item_eng_acc_discount_pct) : 0;
-  const base = round2(pump + acc + engAcc);
+  const hvac = item.use_acc_pricing_calc && item.use_hvac_accessories ? disc(item.item_hvac_lp, item.item_hvac_discount_pct) : 0;
+  const base = round2(pump + acc + engAcc + hvac);
   const freight = round2(base * num(item.item_freight) / 100);
   const margin = round2((base + freight) * num(item.item_margin_pct) / 100);
   const fixed = round2(num(item.item_fixed_price));
   const rate = round2(base + freight + margin + fixed);
-  return { pump, acc, engAcc, base, freight, margin, fixed, rate };
+  return { pump, acc, engAcc, hvac, base, freight, margin, fixed, rate };
 }
 
 function termsKeyFor(docType) {

@@ -325,3 +325,11 @@ alter table documents add constraint documents_doc_type_check
   check (doc_type in ('quotation', 'proforma', 'tax_invoice', 'delivery_challan', 'purchase_order', 'techno_commercial', 'order_acceptance'));
 alter table company_settings add column if not exists order_acceptance_terms text;
 update company_settings set order_acceptance_terms = quotation_terms where id = 1 and order_acceptance_terms is null;
+
+-- ---------- Migration: HVAC panel accessories (per item, optional toggle with its own list price / discount) ----------
+alter table document_items add column if not exists use_hvac_accessories boolean default false;
+alter table document_items add column if not exists spec_hvac_accessories text;
+alter table document_items add column if not exists item_hvac_lp numeric;
+alter table document_items add column if not exists item_hvac_discount_pct numeric;
+alter table products add column if not exists use_hvac_accessories boolean default false;
+alter table products add column if not exists spec_hvac_accessories text;

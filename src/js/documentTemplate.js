@@ -59,7 +59,8 @@ function buildItemDescHtml(it) {
   const engineFields = [
     it.use_engine_spec ? ['Engine Spec', it.spec_engine] : null,
     it.use_engine_accessories ? ['Engine Accessories', it.spec_engine_accessories] : null,
-    it.use_accessories ? ['Accessories', it.spec_accessories] : null
+    it.use_accessories ? ['Accessories', it.spec_accessories] : null,
+    it.use_hvac_accessories ? ['HVAC Panel Accessories', it.spec_hvac_accessories] : null
   ].filter(pair => pair && pair[1]);
   const engineHtml = engineFields.map(([label, v]) => `<div class="item-detail"><strong>${esc(label)}:</strong> ${esc(v)}</div>`).join('');
 
